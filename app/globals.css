@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+:root {
+  --page-bg: #f4f6fb;
+  --page-bg-strong: #e9eef8;
+  --surface: #ffffff;
+  --surface-alt: #f8fafc;
+  --border: #e2e8f0;
+  --text: #0f172a;
+  --muted: #475569;
+  --brand: #2563eb;
+  --brand-strong: #1d4ed8;
+  --accent: #0ea5e9;
+  --accent-strong: #0284c7;
+  --success: #16a34a;
+  --warning: #f59e0b;
+  --error: #dc2626;
+  --shadow: 0 12px 30px -20px rgba(15, 23, 42, 0.5);
+  --shadow-strong: 0 24px 60px -32px rgba(15, 23, 42, 0.65);
+  --radius-lg: 18px;
+  --radius-md: 14px;
+  --radius-sm: 10px;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  color: var(--text);
+  font-family: var(--font-geist-sans), "Segoe UI", sans-serif;
+  background-color: var(--page-bg);
+  background-image:
+    radial-gradient(circle at 15% 20%, rgba(37, 99, 235, 0.12), transparent 45%),
+    radial-gradient(circle at 85% 10%, rgba(14, 165, 233, 0.16), transparent 40%),
+    linear-gradient(180deg, rgba(244, 246, 251, 0.9) 0%, rgba(233, 238, 248, 0.85) 100%);
+  background-attachment: fixed;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+::selection {
+  background: rgba(37, 99, 235, 0.18);
+  color: var(--text);
+}
+
+/* Shared surface styles */
+.surface {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+}
+
+.surface-muted {
+  background: var(--surface-alt);
+}
+
+.card-gradient {
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 60%);
+}
+
+.card-accent {
+  background: linear-gradient(135deg, #e0f2fe 0%, #ffffff 70%);
+}
+
+.text-muted {
+  color: var(--muted);
+}
+
+/* Subtle motion */
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.animate-fade-up {
+  animation: fade-up 0.6s ease both;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.8s ease both;
+}
+
+.stagger-1 {
+  animation-delay: 0.05s;
+}
+
+.stagger-2 {
+  animation-delay: 0.12s;
+}
+
+.stagger-3 {
+  animation-delay: 0.18s;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(71, 85, 105, 0.35);
+  border-radius: 999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(71, 85, 105, 0.5);
+}
+
