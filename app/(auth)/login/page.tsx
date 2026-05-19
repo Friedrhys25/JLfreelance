@@ -2,37 +2,50 @@
 
 import Link from "next/link";
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/app/components/Button";
 import { Input } from "@/app/components/Input";
 import { Card } from "@/app/components/Card";
-import { Scissors, Lock, Mail, ArrowLeft, Eye, EyeOff } from "lucide-react";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { Scissors, Lock, User, ArrowLeft, Eye, EyeOff, AlertCircle } from "lucide-react";
 
 export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const { login } = useAuth();
+  const router = useRouter();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // TODO: Implement authentication logic
-    console.log("Login attempt:", { email, password });
+    setError("");
+    setIsLoading(true);
+
+    const success = await login(username, password);
+
+    if (!success) {
+      setError("Invalid username or password. Please try again.");
+    }
+    setIsLoading(false);
   };
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-2">
+      {/* Left Side - Decorative */}
       <div className="relative hidden items-center justify-center overflow-hidden lg:flex">
         <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-blue-500 to-sky-500" />
         <div className="absolute inset-0 opacity-20" />
         <div className="relative z-10 mx-10 max-w-md space-y-6 text-white">
-          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/10 shadow-(--shadow)">
+          <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/10 backdrop-blur-sm">
             <Scissors className="h-10 w-10" />
           </div>
           <h1 className="text-4xl font-semibold tracking-tight">
             Welcome back to your barbershop workspace.
           </h1>
           <p className="text-sm text-white/80">
-            Sign in to review revenue, manage services, and coordinate every
-            shift in one place.
+            Sign in to manage services, track transactions, and coordinate every shift.
           </p>
           <div className="grid grid-cols-2 gap-3 text-xs text-white/80">
             <div className="rounded-2xl border border-white/20 bg-white/10 px-4 py-3">
@@ -51,35 +64,44 @@ export default function LoginPage() {
         </div>
       </div>
 
+      {/* Right Side - Login Form */}
       <div className="flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md space-y-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm text-(--muted)">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
             <ArrowLeft className="h-4 w-4" />
             Back to home
           </Link>
 
           <Card className="p-8">
             <div className="mb-6 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-(--brand)">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-600">
                 <Lock className="h-6 w-6" />
               </div>
-              <h2 className="mt-4 text-2xl font-semibold text-(--text)">
+              <h2 className="mt-4 text-2xl font-semibold text-[var(--text)]">
                 Sign in
               </h2>
-              <p className="text-sm text-(--muted)">
+              <p className="text-sm text-[var(--muted)]">
                 Use your credentials to access the dashboard.
               </p>
             </div>
 
+            {error && (
+              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-red-600" />
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
+
             <form onSubmit={handleSubmit} className="space-y-5">
               <Input
-                type="email"
-                label="Email address"
-                placeholder="name@barbershop.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                icon={<Mail className="h-5 w-5" />}
+                type="text"
+                label="Username"
+                placeholder="Enter your username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                icon={<User className="h-5 w-5" />}
                 required
+                autoComplete="username"
               />
 
               <div className="relative">
@@ -89,13 +111,14 @@ export default function LoginPage() {
                   placeholder="Enter your password"
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  icon={<Lock className="h-5 w-5" />}
+                  icon={<Lock className="w-5 h-5" />}
                   required
+                  autoComplete="current-password"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-[34px] text-(--muted) transition hover:text-(--text)"
+                  className="absolute right-4 top-[34px] text-[var(--muted)] transition hover:text-[var(--text)]"
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -105,32 +128,29 @@ export default function LoginPage() {
                 </button>
               </div>
 
-              <div className="flex items-center justify-between text-sm">
-                <label className="flex items-center gap-2 text-(--muted)">
-                  <input
-                    type="checkbox"
-                    className="h-4 w-4 rounded border-(--border) accent-[var(--brand)]"
-                  />
-                  Remember me
-                </label>
-                <Link href="#" className="text-(--brand) hover:underline">
-                  Forgot password?
-                </Link>
-              </div>
-
-              <Button type="submit" variant="primary" size="lg" fullWidth>
-                Sign In
+              <Button 
+                type="submit" 
+                variant="primary" 
+                size="lg" 
+                fullWidth
+                disabled={isLoading}
+              >
+                {isLoading ? "Signing in..." : "Sign In"}
               </Button>
             </form>
 
-            <div className="mt-6 border-t border-(--border) pt-6 text-center text-sm text-(--muted)">
-              Don&apos;t have an account?
-              <div className="mt-3">
-                <Link href="/register">
-                  <Button variant="outline" size="md">
-                    Create Account
-                  </Button>
-                </Link>
+            {/* Demo Credentials */}
+            <div className="mt-6 p-4 rounded-lg bg-blue-50 border border-blue-100">
+              <p className="text-xs font-semibold text-blue-800 mb-2">Demo Credentials:</p>
+              <div className="space-y-1 text-xs text-blue-700">
+                <div className="flex justify-between">
+                  <span>Admin:</span>
+                  <code className="bg-white px-2 py-0.5 rounded">admin / admin</code>
+                </div>
+                <div className="flex justify-between">
+                  <span>Cashier:</span>
+                  <code className="bg-white px-2 py-0.5 rounded">cashier / cashier</code>
+                </div>
               </div>
             </div>
           </Card>
@@ -139,4 +159,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

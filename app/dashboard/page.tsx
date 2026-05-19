@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
@@ -52,11 +53,16 @@ import {
   Droplet,
   Building,
   Receipt,
+  Wallet,
   ChevronLeft,
   ChevronRight as ChevronRightIcon,
   Plus,
   X as XIcon,
+  Users,
+  Clock3,
 } from "lucide-react";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { Filter, BarChart2 } from "lucide-react";
 
 interface Transaction {
   id: string;
@@ -67,6 +73,7 @@ interface Transaction {
   service: string;
   cost: number;
   status: string;
+  branch?: string;
 }
 
 interface Expense {
@@ -76,12 +83,17 @@ interface Expense {
   water: number;
   rent: number;
   other: number;
+  branch?: string;
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
+  const { user, logout, isAdmin, isCashier, isAuthenticated, cashiers, addCashier, deleteCashier, branches } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [posModalOpen, setPosModalOpen] = useState(false);
   const [expensesModalOpen, setExpensesModalOpen] = useState(false);
+  const [addBarberModalOpen, setAddBarberModalOpen] = useState(false);
+  const [addCashierModalOpen, setAddCashierModalOpen] = useState(false);
   const [posStep, setPosStep] = useState(1);
   const [selectedBarber, setSelectedBarber] = useState<string | null>(null);
   const [selectedService, setSelectedService] = useState<string | null>(null);
@@ -95,7 +107,24 @@ export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<"overview" | "expenses">("overview");
   const [revenueChartType, setRevenueChartType] = useState<"bar" | "line">("bar");
   const [expenseChartType, setExpenseChartType] = useState<"bar" | "line">("bar");
+  const [selectedBranch, setSelectedBranch] = useState<string>("all");
+  const [selectedChartDataType, setSelectedChartDataType] = useState<"revenue" | "services" | "barber">("revenue");
+  const [newCashier, setNewCashier] = useState({ username: "", password: "", branch: "Main Branch" });
   const itemsPerPage = 10;
+
+  // Redirect if not authenticated
+  useEffect(() => {
+    if (!isAuthenticated) {
+      router.push("/login");
+    }
+  }, [isAuthenticated, router]);
+
+  // Cashier can only see overview tab
+  useEffect(() => {
+    if (isCashier && activeTab === "expenses") {
+      setActiveTab("overview");
+    }
+  }, [isCashier, activeTab]);
 
   const mockData = {
     services: [
@@ -276,16 +305,28 @@ export default function DashboardPage() {
   const netProfit = currentMonthRevenue - totalExpenses;
   const roi = totalExpenses > 0 ? ((netProfit / totalExpenses) * 100) : 0;
 
-  // Barber performance
+  // Revenue Split (60% Barber / 40% Shop)
+  const BARBER_SHARE = 0.6;
+  const SHOP_SHARE = 0.4;
+
+  // Barber performance with 60/40 split
   const barberPerformance = mockData.barbers.map((barber) => {
     const barberTransactions = transactions.filter((t) => t.barber === barber.name);
-    const revenue = barberTransactions.reduce((sum, t) => sum + t.cost, 0);
+    const totalRevenue = barberTransactions.reduce((sum, t) => sum + t.cost, 0);
+    const barberShare = totalRevenue * BARBER_SHARE;
+    const shopShare = totalRevenue * SHOP_SHARE;
     return {
       name: barber.name,
       services: barberTransactions.length,
-      revenue,
+      totalRevenue,
+      barberShare,
+      shopShare,
     };
   });
+
+  // Total splits for stats
+  const totalBarberShare = totalRevenue * BARBER_SHARE;
+  const totalShopShare = totalRevenue * SHOP_SHARE;
 
   return (
     <div className="min-h-screen bg-[var(--page-bg)]">
@@ -297,9 +338,18 @@ export default function DashboardPage() {
               <div className="bg-gradient-to-br from-[var(--brand)] to-[var(--brand-strong)] p-2 rounded-xl shadow-sm">
                 <Scissors className="w-5 h-5 text-white" />
               </div>
-              <span className="text-lg font-semibold text-[var(--text)] hidden sm:block">
-                Barbershop POS
-              </span>
+              <div className="hidden sm:block">
+                <span className="text-lg font-semibold text-[var(--text)] block">
+                  Barbershop POS
+                </span>
+                <span className="text-xs text-[var(--muted)] capitalize">{user.role} view</span>
+                {user.branch && (
+                  <span className="text-xs text-[var(--brand)] flex items-center gap-1 mt-0.5">
+                    <Building className="w-3 h-3" />
+                    {user.branch}
+                  </span>
+                )}
+              </div>
             </div>
 
             <div className="hidden md:flex items-center gap-3">
@@ -311,20 +361,30 @@ export default function DashboardPage() {
                 <TrendingUp className="w-4 h-4 mr-2" />
                 Overview
               </Button>
-              <Button
-                variant={activeTab === "expenses" ? "primary" : "outline"}
-                size="sm"
-                onClick={() => setActiveTab("expenses")}
-              >
-                <Receipt className="w-4 h-4 mr-2" />
-                Expenses & ROI
-              </Button>
+              {isAdmin && (
+                <>
+                  <Button
+                    variant={activeTab === "expenses" ? "primary" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveTab("expenses")}
+                  >
+                    <Receipt className="w-4 h-4 mr-2" />
+                    Expenses & ROI
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setAddCashierModalOpen(true)}
+                  >
+                    <Users className="w-4 h-4 mr-2" />
+                    Manage Cashiers
+                  </Button>
+                </>
+              )}
               <div className="w-px h-6 bg-[var(--border)]" />
-              <Link href="/login">
-                <Button variant="ghost" size="sm">
-                  <LogOut className="w-4 h-4" />
-                </Button>
-              </Link>
+              <Button variant="ghost" size="sm" onClick={logout}>
+                <LogOut className="w-4 h-4" />
+              </Button>
             </div>
 
             <button
@@ -350,21 +410,21 @@ export default function DashboardPage() {
                 <TrendingUp className="w-4 h-4 mr-2" />
                 Overview
               </Button>
-              <Button
-                variant={activeTab === "expenses" ? "primary" : "outline"}
-                size="sm"
-                fullWidth
-                onClick={() => { setActiveTab("expenses"); setMobileMenuOpen(false); }}
-              >
-                <Receipt className="w-4 h-4 mr-2" />
-                Expenses & ROI
-              </Button>
-              <Link href="/login">
-                <Button variant="error" size="sm" fullWidth>
-                  <LogOut className="w-4 h-4 mr-2" />
-                  Logout
+              {isAdmin && (
+                <Button
+                  variant={activeTab === "expenses" ? "primary" : "outline"}
+                  size="sm"
+                  fullWidth
+                  onClick={() => { setActiveTab("expenses"); setMobileMenuOpen(false); }}
+                >
+                  <Receipt className="w-4 h-4 mr-2" />
+                  Expenses & ROI
                 </Button>
-              </Link>
+              )}
+              <Button variant="error" size="sm" fullWidth onClick={logout}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Logout
+              </Button>
             </div>
           )}
         </div>
@@ -377,12 +437,12 @@ export default function DashboardPage() {
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
               <h1 className="text-3xl font-bold text-[var(--text)] mb-1">
-                {activeTab === "overview" ? "Dashboard" : "Expenses & ROI"}
+                Dashboard
               </h1>
               <p className="text-sm text-[var(--muted)]">
-                {activeTab === "overview" 
-                  ? "Manage queue and view transactions" 
-                  : "Track branch expenses and calculate ROI"}
+                {isAdmin 
+                  ? "Manage queue, view transactions, and track expenses" 
+                  : "Manage queue and view daily transactions"}
               </p>
             </div>
             <div className="flex gap-3">
@@ -414,7 +474,7 @@ export default function DashboardPage() {
           {activeTab === "overview" && (
             <>
               {/* Stats Cards */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+              <div className={`grid gap-4 mb-6 ${isAdmin ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" : "grid-cols-1 sm:grid-cols-2"}`}>
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
                     <div>
@@ -431,21 +491,23 @@ export default function DashboardPage() {
                   </div>
                 </Card>
 
-                <Card className="p-5">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
-                        Today&apos;s Revenue
-                      </p>
-                      <p className="text-3xl font-bold text-[var(--text)]">
-                        {formatCurrency(todayRevenue)}
-                      </p>
+                {isAdmin && (
+                  <Card className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                          Today&apos;s Revenue
+                        </p>
+                        <p className="text-3xl font-bold text-[var(--text)]">
+                          {formatCurrency(todayRevenue)}
+                        </p>
+                      </div>
+                      <div className="bg-emerald-100 p-3 rounded-xl">
+                        <DollarSign className="w-6 h-6 text-emerald-600" />
+                      </div>
                     </div>
-                    <div className="bg-emerald-100 p-3 rounded-xl">
-                      <DollarSign className="w-6 h-6 text-emerald-600" />
-                    </div>
-                  </div>
-                </Card>
+                  </Card>
+                )}
 
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
@@ -463,23 +525,71 @@ export default function DashboardPage() {
                   </div>
                 </Card>
 
-                <Card className="p-5">
+                {isAdmin && (
+                  <Card className="p-5">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                          Total Revenue
+                        </p>
+                        <p className="text-3xl font-bold text-[var(--text)]">
+                          {formatCurrency(totalRevenue)}
+                        </p>
+                      </div>
+                      <div className="bg-amber-100 p-3 rounded-xl">
+                        <Scissors className="w-6 h-6 text-amber-600" />
+                      </div>
+                    </div>
+                  </Card>
+                )}
+              </div>
+
+              {/* Revenue Split Stats - Admin Only */}
+              {isAdmin && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+                <Card className="p-5 border-l-4 border-l-emerald-500">
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
-                        Total Revenue
+                        Barbers&apos; Share (60%)
                       </p>
-                      <p className="text-3xl font-bold text-[var(--text)]">
-                        {formatCurrency(totalRevenue)}
+                      <p className="text-3xl font-bold text-emerald-600">
+                        {formatCurrency(totalBarberShare)}
+                      </p>
+                      <p className="text-xs text-[var(--muted)] mt-1">
+                        Total earnings for all barbers
                       </p>
                     </div>
-                    <div className="bg-amber-100 p-3 rounded-xl">
-                      <Scissors className="w-6 h-6 text-amber-600" />
+                    <div className="bg-emerald-100 p-3 rounded-xl">
+                      <UserCircle className="w-6 h-6 text-emerald-600" />
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="p-5 border-l-4 border-l-blue-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                        Shop Income (40%)
+                      </p>
+                      <p className="text-3xl font-bold text-blue-600">
+                        {formatCurrency(totalShopShare)}
+                      </p>
+                      <p className="text-xs text-[var(--muted)] mt-1">
+                        Shop revenue before expenses
+                      </p>
+                    </div>
+                    <div className="bg-blue-100 p-3 rounded-xl">
+                      <Building className="w-6 h-6 text-blue-600" />
                     </div>
                   </div>
                 </Card>
               </div>
+              )}
 
+              {/* Charts Row - Admin Only */}
+              {isAdmin && (
+              <>
               <Card className="p-5 mb-6">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   <div>
@@ -596,6 +706,47 @@ export default function DashboardPage() {
                   </ResponsiveContainer>
                 </Card>
               </div>
+              </>
+              )}
+
+              {/* Time-based Service Trend - For Cashier */}
+              {!isAdmin && (
+              <Card className="p-6 mb-6">
+                <h3 className="text-sm font-semibold text-[var(--text)] mb-4">
+                  Today&apos;s Service Timeline
+                </h3>
+                <div className="space-y-3">
+                  {todayTransactions.length > 0 ? (
+                    todayTransactions.map((txn, idx) => (
+                      <div key={txn.id} className="flex items-center gap-4 p-3 rounded-lg bg-[var(--muted-light)] border border-[var(--border)]">
+                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 font-bold text-sm">
+                          {idx + 1}
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center justify-between">
+                            <span className="font-semibold text-[var(--text)]">{txn.clientName}</span>
+                            <span className="text-sm text-[var(--muted)]">{txn.time}</span>
+                          </div>
+                          <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
+                            <span>{txn.service}</span>
+                            <span>•</span>
+                            <span>{txn.barber}</span>
+                          </div>
+                        </div>
+                        <Badge variant={txn.status === "completed" ? "success" : "warning"}>
+                          {txn.status}
+                        </Badge>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="text-center py-8 text-[var(--muted)]">
+                      <Clock3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No services today</p>
+                    </div>
+                  )}
+                </div>
+              </Card>
+              )}
             </>
           )}
 
@@ -667,6 +818,57 @@ export default function DashboardPage() {
                     </div>
                     <div className={`p-3 rounded-xl ${roi >= 0 ? "bg-emerald-100" : "bg-red-100"}`}>
                       <TrendingUp className="w-6 h-6 text-emerald-600" />
+                    </div>
+                  </div>
+                </Card>
+              </div>
+
+              {/* Revenue Split Stats for Expenses Tab */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+                <Card className="p-5 border-l-4 border-l-emerald-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                        Barbers&apos; Share (60%)
+                      </p>
+                      <p className="text-2xl font-bold text-emerald-600">
+                        {formatCurrency(currentMonthRevenue * BARBER_SHARE)}
+                      </p>
+                    </div>
+                    <div className="bg-emerald-100 p-2 rounded-xl">
+                      <UserCircle className="w-5 h-5 text-emerald-600" />
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="p-5 border-l-4 border-l-blue-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                        Shop Income (40%)
+                      </p>
+                      <p className="text-2xl font-bold text-blue-600">
+                        {formatCurrency(currentMonthRevenue * SHOP_SHARE)}
+                      </p>
+                    </div>
+                    <div className="bg-blue-100 p-2 rounded-xl">
+                      <Building className="w-5 h-5 text-blue-600" />
+                    </div>
+                  </div>
+                </Card>
+
+                <Card className="p-5 border-l-4 border-l-purple-500">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                        Shop Net (After Expenses)
+                      </p>
+                      <p className={`text-2xl font-bold ${((currentMonthRevenue * SHOP_SHARE) - totalExpenses) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                        {formatCurrency((currentMonthRevenue * SHOP_SHARE) - totalExpenses)}
+                      </p>
+                    </div>
+                    <div className={`p-2 rounded-xl ${((currentMonthRevenue * SHOP_SHARE) - totalExpenses) >= 0 ? "bg-emerald-100" : "bg-red-100"}`}>
+                      <Wallet className="w-5 h-5 text-purple-600" />
                     </div>
                   </div>
                 </Card>
@@ -753,7 +955,7 @@ export default function DashboardPage() {
                   <h3 className="text-sm font-semibold text-[var(--text)]">
                     Monthly Sales, Expenses, ROI
                   </h3>
-                  <Badge variant="outline">Per Month</Badge>
+                  <Badge variant="neutral">Per Month</Badge>
                 </div>
                 <div className="overflow-x-auto">
                   <Table>
@@ -833,6 +1035,105 @@ export default function DashboardPage() {
                   </Card>
                 </div>
               )}
+
+              {/* Branch Sales Analytics Table */}
+              <Card className="p-6 mb-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <h3 className="text-sm font-semibold text-[var(--text)]">
+                      Branch Sales Analytics
+                    </h3>
+                    <p className="text-xs text-[var(--muted)]">Sales performance by branch location</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <Filter className="w-4 h-4 text-[var(--muted)]" />
+                    <select
+                      value={selectedBranch}
+                      onChange={(e) => setSelectedBranch(e.target.value)}
+                      className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+                    >
+                      <option value="all">All Branches</option>
+                      {branches.map((branch) => (
+                        <option key={branch} value={branch}>{branch}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Branch Stats Cards */}
+                <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                  {branches.map((branch) => {
+                    const branchTransactions = selectedBranch === "all" 
+                      ? transactions.filter((t) => (t.branch || "Main Branch") === branch && t.status === "completed")
+                      : selectedBranch === branch
+                        ? transactions.filter((t) => (t.branch || "Main Branch") === branch && t.status === "completed")
+                        : [];
+                    const branchRevenue = branchTransactions.reduce((sum, t) => sum + t.cost, 0);
+                    const branchCount = branchTransactions.length;
+                    
+                    if (selectedBranch !== "all" && selectedBranch !== branch) return null;
+                    
+                    return (
+                      <Card key={branch} className="p-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <Building className="w-4 h-4 text-[var(--brand)]" />
+                          <span className="text-xs font-medium text-[var(--muted)] truncate">{branch}</span>
+                        </div>
+                        <p className="text-2xl font-bold text-[var(--text)] mb-1">
+                          {formatCurrency(branchRevenue)}
+                        </p>
+                        <p className="text-xs text-[var(--muted)]">
+                          {branchCount} transaction{branchCount !== 1 ? "s" : ""}
+                        </p>
+                      </Card>
+                    );
+                  })}
+                </div>
+
+                {/* Branch Sales Table */}
+                <div className="overflow-x-auto">
+                  <Table>
+                    <TableHeader>
+                      <TableRow>
+                        <TableHead>Branch</TableHead>
+                        <TableHead>Total Sales</TableHead>
+                        <TableHead>Transactions</TableHead>
+                        <TableHead>Avg. per Transaction</TableHead>
+                        <TableHead>Barber Share (60%)</TableHead>
+                        <TableHead>Shop Income (40%)</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <tbody>
+                      {branches.map((branch) => {
+                        const branchTransactions = transactions.filter((t) => (t.branch || "Main Branch") === branch && t.status === "completed");
+                        const branchRevenue = branchTransactions.reduce((sum, t) => sum + t.cost, 0);
+                        const branchCount = branchTransactions.length;
+                        const avgTransaction = branchCount > 0 ? branchRevenue / branchCount : 0;
+                        const barberShare = branchRevenue * BARBER_SHARE;
+                        const shopShare = branchRevenue * SHOP_SHARE;
+                        
+                        if (selectedBranch !== "all" && selectedBranch !== branch) return null;
+                        
+                        return (
+                          <TableRow key={branch}>
+                            <TableCell className="font-medium">
+                              <div className="flex items-center gap-2">
+                                <Building className="w-4 h-4 text-[var(--brand)]" />
+                                {branch}
+                              </div>
+                            </TableCell>
+                            <TableCell className="font-semibold">{formatCurrency(branchRevenue)}</TableCell>
+                            <TableCell>{branchCount}</TableCell>
+                            <TableCell>{formatCurrency(avgTransaction)}</TableCell>
+                            <TableCell className="text-emerald-600">{formatCurrency(barberShare)}</TableCell>
+                            <TableCell className="text-blue-600">{formatCurrency(shopShare)}</TableCell>
+                          </TableRow>
+                        );
+                      })}
+                    </tbody>
+                  </Table>
+                </div>
+              </Card>
             </>
           )}
         </div>
@@ -841,45 +1142,96 @@ export default function DashboardPage() {
           <>
             {/* Filters */}
             <Card className="p-4 mb-6">
-              <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
-                <div className="relative w-full lg:w-80">
-                  <Input
-                    type="text"
-                    placeholder="Search by client, barber, or service..."
-                    value={searchTerm}
-                    onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
-                    icon={<Search className="w-4 h-4" />}
-                  />
-                </div>
-                <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
-                  <div className="flex items-center gap-2">
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
-                      className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
-                    />
-                    <span className="text-sm text-[var(--muted)]">to</span>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
-                      className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+              <div className="flex flex-col gap-4">
+                <div className="flex flex-col lg:flex-row gap-4 items-center justify-between">
+                  <div className="relative w-full lg:w-80">
+                    <Input
+                      type="text"
+                      placeholder="Search by client, barber, or service..."
+                      value={searchTerm}
+                      onChange={(e) => { setSearchTerm(e.target.value); setCurrentPage(1); }}
+                      icon={<Search className="w-4 h-4" />}
                     />
                   </div>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setSearchTerm("");
-                      setStartDate("");
-                      setEndDate("");
-                      setCurrentPage(1);
-                    }}
-                  >
-                    Clear
-                  </Button>
+                  <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
+                    {isAdmin && (
+                      <div className="flex items-center gap-2">
+                        <Filter className="w-4 h-4 text-[var(--muted)]" />
+                        <select
+                          value={selectedBranch}
+                          onChange={(e) => setSelectedBranch(e.target.value)}
+                          className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+                        >
+                          <option value="all">All Branches</option>
+                          {branches.map((branch) => (
+                            <option key={branch} value={branch}>{branch}</option>
+                          ))}
+                        </select>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
+                        className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+                      />
+                      <span className="text-sm text-[var(--muted)]">to</span>
+                      <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
+                        className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+                      />
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => {
+                        setSearchTerm("");
+                        setStartDate("");
+                        setEndDate("");
+                        setSelectedBranch("all");
+                        setCurrentPage(1);
+                      }}
+                    >
+                      Clear
+                    </Button>
+                  </div>
                 </div>
+
+                {/* Chart Data Type Filter - Admin Only */}
+                {isAdmin && (
+                  <div className="flex items-center gap-4 pt-4 border-t border-[var(--border)]">
+                    <div className="flex items-center gap-2">
+                      <BarChart2 className="w-4 h-4 text-[var(--muted)]" />
+                      <span className="text-sm font-medium text-[var(--text)]">Chart Data:</span>
+                      <div className="flex gap-2">
+                        <Button
+                          size="sm"
+                          variant={selectedChartDataType === "revenue" ? "primary" : "outline"}
+                          onClick={() => setSelectedChartDataType("revenue")}
+                        >
+                          Revenue
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={selectedChartDataType === "services" ? "primary" : "outline"}
+                          onClick={() => setSelectedChartDataType("services")}
+                        >
+                          Services
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={selectedChartDataType === "barber" ? "primary" : "outline"}
+                          onClick={() => setSelectedChartDataType("barber")}
+                        >
+                          Barber
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             </Card>
 
@@ -1017,19 +1369,24 @@ export default function DashboardPage() {
         )}
 
         {activeTab === "expenses" && (
-          /* Barber Performance Table */
+          /* Barber Performance Table with 60/40 Split */
           <Card>
             <div className="p-4 border-b border-[var(--border)]">
               <h2 className="text-sm font-semibold text-[var(--text)]">
-                Barber Performance
+                Barber Performance & Revenue Split
               </h2>
+              <p className="text-xs text-[var(--muted)] mt-1">
+                Revenue is split 60% to barber, 40% to shop
+              </p>
             </div>
             <Table>
               <TableHeader>
                 <TableRow>
                   <TableHead>Barber</TableHead>
                   <TableHead>Services Done</TableHead>
-                  <TableHead>Revenue Generated</TableHead>
+                  <TableHead>Total Revenue</TableHead>
+                  <TableHead>Barber Share (60%)</TableHead>
+                  <TableHead>Shop Income (40%)</TableHead>
                   <TableHead>Avg. per Service</TableHead>
                 </TableRow>
               </TableHeader>
@@ -1038,9 +1395,11 @@ export default function DashboardPage() {
                   <TableRow key={barber.name}>
                     <TableCell className="font-medium">{barber.name}</TableCell>
                     <TableCell>{barber.services}</TableCell>
-                    <TableCell className="font-semibold">{formatCurrency(barber.revenue)}</TableCell>
+                    <TableCell className="font-semibold">{formatCurrency(barber.totalRevenue)}</TableCell>
+                    <TableCell className="font-semibold text-emerald-600">{formatCurrency(barber.barberShare)}</TableCell>
+                    <TableCell className="font-semibold text-blue-600">{formatCurrency(barber.shopShare)}</TableCell>
                     <TableCell>
-                      {barber.services > 0 ? formatCurrency(barber.revenue / barber.services) : "-"}
+                      {barber.services > 0 ? formatCurrency(barber.totalRevenue / barber.services) : "-"}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -1271,6 +1630,110 @@ export default function DashboardPage() {
               <Input type="number" placeholder="0" />
             </div>
           </div>
+        </div>
+      </Modal>
+
+      {/* Add Cashier Modal */}
+      <Modal
+        isOpen={addCashierModalOpen}
+        onClose={() => {
+          setAddCashierModalOpen(false);
+          setNewCashier({ username: "", password: "", branch: "Main Branch" });
+        }}
+        title="Add New Cashier"
+        footer={
+          <div className="flex gap-2 w-full">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddCashierModalOpen(false);
+                setNewCashier({ username: "", password: "", branch: "Main Branch" });
+              }}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (newCashier.username && newCashier.password) {
+                  addCashier({
+                    username: newCashier.username,
+                    password: newCashier.password,
+                    role: "cashier",
+                    branch: newCashier.branch,
+                  });
+                  setNewCashier({ username: "", password: "", branch: "Main Branch" });
+                  setAddCashierModalOpen(false);
+                }
+              }}
+              className="flex-1"
+            >
+              Add Cashier
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            type="text"
+            label="Username"
+            placeholder="Enter username"
+            value={newCashier.username}
+            onChange={(e) => setNewCashier({ ...newCashier, username: e.target.value })}
+            icon={<User className="w-4 h-4" />}
+          />
+          <Input
+            type="password"
+            label="Password"
+            placeholder="Enter password"
+            value={newCashier.password}
+            onChange={(e) => setNewCashier({ ...newCashier, password: e.target.value })}
+            icon={<User className="w-4 h-4" />}
+          />
+          <div>
+            <label className="text-sm font-medium text-[var(--muted)] mb-1.5 block">
+              <Building className="w-4 h-4 inline mr-1" />
+              Branch Location
+            </label>
+            <select
+              value={newCashier.branch}
+              onChange={(e) => setNewCashier({ ...newCashier, branch: e.target.value })}
+              className="w-full rounded-lg border border-[var(--border)] bg-white px-4 py-2.5 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+            >
+              {branches.map((branch) => (
+                <option key={branch} value={branch}>{branch}</option>
+              ))}
+            </select>
+          </div>
+
+          {/* Existing Cashiers List */}
+          {cashiers.length > 0 && (
+            <div className="mt-6 pt-4 border-t border-[var(--border)]">
+              <h4 className="text-sm font-semibold text-[var(--text)] mb-3">Existing Cashiers</h4>
+              <div className="space-y-2 max-h-40 overflow-y-auto">
+                {cashiers.map((cashier) => (
+                  <div key={cashier.id} className="flex items-center justify-between p-2 rounded-lg bg-[var(--muted-light)]">
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text)]">{cashier.username}</p>
+                      <p className="text-xs text-[var(--muted)] flex items-center gap-1">
+                        <Building className="w-3 h-3" />
+                        {cashier.branch}
+                      </p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteCashier(cashier.username)}
+                      className="text-red-500 hover:text-red-600"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       </Modal>
     </div>
