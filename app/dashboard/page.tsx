@@ -18,6 +18,8 @@ import {
 import {
   BarChart,
   Bar,
+  AreaChart,
+  Area,
   LineChart,
   Line,
   PieChart,
@@ -99,20 +101,44 @@ interface Barber {
   name: string;
   avatar: string;
   specialty: string;
+  branch?: string;
 }
+
+const SERVICES: Service[] = [
+  { id: "1", name: "Haircut", price: 2699, duration: "30 min" },
+  { id: "2", name: "Haircut with Treatment", price: 3100, duration: "45 min" },
+  { id: "3", name: "Hair Color", price: 1699, duration: "60 min" },
+];
+
+const INITIAL_BARBERS: Barber[] = [
+  { id: "1", name: "Marco", avatar: "👨‍🦱", specialty: "Fade & Taper" },
+  { id: "2", name: "Andre", avatar: "🧔", specialty: "Classic Cuts" },
+  { id: "3", name: "Jun", avatar: "👨", specialty: "Color Specialist" },
+  { id: "4", name: "Rico", avatar: "🧑", specialty: "Beard & Mustache" },
+];
+
+const BARBER_SPECIALTIES = ["Haircut", "Hair Color", "Hair Treatment"] as const;
+const getServiceCategory = (serviceName: string) => {
+  const lowered = serviceName.toLowerCase();
+
+  if (lowered.includes("color")) return "Hair Color";
+  if (lowered.includes("treatment")) return "Hair Treatment";
+  return "Haircut";
+};
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { user, logout, isAdmin, isCashier, isAuthenticated, cashiers, addCashier, deleteCashier, branches } = useAuth();
+  const { user, logout, isAdmin, isCashier, isClient, isAuthenticated, users, addUser, deleteUser, branches } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [posModalOpen, setPosModalOpen] = useState(false);
   const [expensesModalOpen, setExpensesModalOpen] = useState(false);
   const [addBarberModalOpen, setAddBarberModalOpen] = useState(false);
-  const [addCashierModalOpen, setAddCashierModalOpen] = useState(false);
+  const [addUserModalOpen, setAddUserModalOpen] = useState(false);
   const [posStep, setPosStep] = useState(1);
   const [selectedBarber, setSelectedBarber] = useState<string | null>(null);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [clientName, setClientName] = useState("");
+  const [barbers, setBarbers] = useState<Barber[]>(INITIAL_BARBERS);
   const [transactions, setTransactions] = useState<Transaction[]>(dashboardData.transactions as Transaction[]);
   const [expenses, setExpenses] = useState<Expense[]>(dashboardData.expenses as Expense[]);
   const [searchTerm, setSearchTerm] = useState("");
@@ -124,7 +150,18 @@ export default function DashboardPage() {
   const [expenseChartType, setExpenseChartType] = useState<"bar" | "line">("bar");
   const [selectedBranch, setSelectedBranch] = useState<string>("all");
   const [selectedChartDataType, setSelectedChartDataType] = useState<"revenue" | "services" | "barber">("revenue");
-  const [newCashier, setNewCashier] = useState({ username: "", password: "", branch: "Main Branch" });
+  const [serviceTrendChartType, setServiceTrendChartType] = useState<"bar" | "area">("bar");
+  const [newUser, setNewUser] = useState({
+    username: "",
+    password: "",
+    role: "cashier" as "admin" | "cashier" | "client",
+    branch: "Main Branch",
+  });
+  const [newBarber, setNewBarber] = useState({
+    name: "",
+    specialty: "Haircut" as typeof BARBER_SPECIALTIES[number],
+    branch: "Main Branch",
+  });
   const itemsPerPage = 10;
 
   // Redirect if not authenticated
@@ -141,19 +178,12 @@ export default function DashboardPage() {
     }
   }, [isCashier, activeTab]);
 
-  const mockData = {
-    services: [
-      { id: "1", name: "Haircut", price: 2699, duration: "30 min" },
-      { id: "2", name: "Haircut with Treatment", price: 3100, duration: "45 min" },
-      { id: "3", name: "Hair Color", price: 1699, duration: "60 min" },
-    ],
-    barbers: [
-      { id: "1", name: "Marco", avatar: "👨‍🦱", specialty: "Fade & Taper" },
-      { id: "2", name: "Andre", avatar: "🧔", specialty: "Classic Cuts" },
-      { id: "3", name: "Jun", avatar: "👨", specialty: "Color Specialist" },
-      { id: "4", name: "Rico", avatar: "🧑", specialty: "Beard & Mustache" },
-    ],
-  };
+  // Clients are locked to their assigned branch
+  useEffect(() => {
+    if (isClient && user.branch) {
+      setSelectedBranch(user.branch);
+    }
+  }, [isClient, user.branch]);
 
   useEffect(() => {
     setTransactions(dashboardData.transactions as Transaction[]);
@@ -185,9 +215,9 @@ export default function DashboardPage() {
         hour12: true,
       }),
       clientName,
-      barber: mockData.barbers.find((b) => b.id === selectedBarber)?.name || "",
-      service: mockData.services.find((s) => s.id === selectedService)?.name || "",
-      cost: mockData.services.find((s) => s.id === selectedService)?.price || 0,
+      barber: barbers.find((b) => b.id === selectedBarber)?.name || "",
+      service: SERVICES.find((s) => s.id === selectedService)?.name || "",
+      cost: SERVICES.find((s) => s.id === selectedService)?.price || 0,
       status: "queued",
     };
 
@@ -254,6 +284,10 @@ export default function DashboardPage() {
     (t) => t.date === new Date().toISOString().split("T")[0]
   );
   const todayRevenue = todayTransactions.reduce((sum, t) => sum + t.cost, 0);
+  const serviceTrendData = BARBER_SPECIALTIES.map((label) => ({
+    label,
+    count: todayTransactions.filter((t) => getServiceCategory(t.service) === label).length,
+  }));
 
   // Monthly revenue for charts (filtered by branch)
   const monthlyRevenue = filteredTransactions.reduce((acc, t) => {
@@ -285,33 +319,93 @@ export default function DashboardPage() {
     ? expenses 
     : expenses.filter((e) => (e.branch || "Main Branch") === selectedBranch);
   
-  const currentMonthExpenses = filteredExpenses.find((e) => e.month === new Date().toISOString().substring(0, 7));
+  const currentMonthKey = new Date().toISOString().substring(0, 7);
+  const getLatestExpenseMonthKey = (branch?: string) => {
+    const latest = expenses
+      .filter((e) => (branch ? (e.branch || "Main Branch") === branch : true))
+      .reduce((max, e) => (e.month > max ? e.month : max), "");
+
+    return latest || currentMonthKey;
+  };
+  const aggregatedExpensesByMonth = filteredExpenses.reduce((acc, e) => {
+    const existing = acc[e.month] || {
+      electricity: 0,
+      water: 0,
+      rent: 0,
+      other: 0,
+    };
+
+    acc[e.month] = {
+      electricity: existing.electricity + e.electricity,
+      water: existing.water + e.water,
+      rent: existing.rent + e.rent,
+      other: existing.other + e.other,
+    };
+
+    return acc;
+  }, {} as Record<string, { electricity: number; water: number; rent: number; other: number }>);
+
+  const expenseSummaryMonthKey = getLatestExpenseMonthKey(
+    selectedBranch === "all" ? undefined : selectedBranch
+  );
+  const currentMonthExpenses = aggregatedExpensesByMonth[expenseSummaryMonthKey];
   const totalExpenses = currentMonthExpenses
     ? currentMonthExpenses.electricity + currentMonthExpenses.water + currentMonthExpenses.rent + currentMonthExpenses.other
     : 0;
-  const monthlyExpenses = filteredExpenses.map((e) => ({
-    month: new Date(e.month).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-    electricity: e.electricity,
-    water: e.water,
-    rent: e.rent,
-    other: e.other,
-    total: e.electricity + e.water + e.rent + e.other,
-  }));
-  const monthlyFinancials = filteredExpenses.map((e) => {
-    const revenue = monthlyRevenue[e.month] || 0;
-    const total = e.electricity + e.water + e.rent + e.other;
-    const roiValue = total > 0 ? ((revenue - total) / total) * 100 : 0;
+  const monthlyExpenses = Object.entries(aggregatedExpensesByMonth)
+    .sort(([monthA], [monthB]) => monthA.localeCompare(monthB))
+    .map(([month, totals]) => ({
+      month,
+      label: new Date(month).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      electricity: totals.electricity,
+      water: totals.water,
+      rent: totals.rent,
+      other: totals.other,
+      total: totals.electricity + totals.water + totals.rent + totals.other,
+    }));
+  const monthlyFinancials = monthlyExpenses.map((row) => {
+    const revenue = monthlyRevenue[row.month] || 0;
     return {
-      month: new Date(e.month).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      month: row.month,
+      label: row.label,
       revenue,
-      expenses: total,
-      roi: roiValue,
+      expenses: row.total,
+      roi: row.total > 0 ? ((revenue - row.total) / row.total) * 100 : 0,
     };
   });
+  const getBranchFinancialSummary = (branch?: string) => {
+    const summaryMonthKey = getLatestExpenseMonthKey(branch);
+    const branchTransactions = transactions.filter((t) => {
+      if (t.status !== "completed") return false;
+      if (!t.date.startsWith(summaryMonthKey)) return false;
+      return branch ? (t.branch || "Main Branch") === branch : true;
+    });
+    const branchRevenue = branchTransactions.reduce((sum, t) => sum + t.cost, 0);
+
+    const branchCurrentMonthExpense = expenses.find((e) => {
+      if (e.month !== summaryMonthKey) return false;
+      return branch ? (e.branch || "Main Branch") === branch : true;
+    });
+    const branchExpensesTotal = branchCurrentMonthExpense
+      ? branchCurrentMonthExpense.electricity +
+        branchCurrentMonthExpense.water +
+        branchCurrentMonthExpense.rent +
+        branchCurrentMonthExpense.other
+      : 0;
+    const branchNet = branchRevenue - branchExpensesTotal;
+    const branchRoi = branchExpensesTotal > 0 ? (branchNet / branchExpensesTotal) * 100 : 0;
+
+    return {
+      revenue: branchRevenue,
+      expenses: branchExpensesTotal,
+      net: branchNet,
+      roi: branchRoi,
+    };
+  };
 
   // ROI Calculation (filtered by branch)
   const currentMonthRevenue = filteredTransactions
-    .filter((t) => t.date.startsWith(new Date().toISOString().substring(0, 7)))
+    .filter((t) => t.date.startsWith(expenseSummaryMonthKey))
     .reduce((sum, t) => sum + t.cost, 0);
 
   const netProfit = currentMonthRevenue - totalExpenses;
@@ -322,7 +416,7 @@ export default function DashboardPage() {
   const SHOP_SHARE = 0.4;
 
   // Barber performance with 60/40 split (filtered by branch)
-  const barberPerformance = mockData.barbers.map((barber) => {
+  const barberPerformance = barbers.map((barber) => {
     const barberTransactions = filteredTransactions.filter((t) => t.barber === barber.name);
     const totalRevenue = barberTransactions.reduce((sum, t) => sum + t.cost, 0);
     const barberShare = totalRevenue * BARBER_SHARE;
@@ -373,7 +467,7 @@ export default function DashboardPage() {
                 <TrendingUp className="w-4 h-4 mr-2" />
                 Overview
               </Button>
-              {isAdmin && (
+              {(isAdmin || isClient) && (
                 <>
                   <Button
                     variant={activeTab === "expenses" ? "primary" : "outline"}
@@ -386,11 +480,21 @@ export default function DashboardPage() {
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() => setAddCashierModalOpen(true)}
+                    onClick={() => setAddBarberModalOpen(true)}
                   >
-                    <Users className="w-4 h-4 mr-2" />
-                    Manage Cashiers
+                    <Plus className="w-4 h-4 mr-2" />
+                    Add Barber
                   </Button>
+                  {isAdmin && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setAddUserModalOpen(true)}
+                    >
+                      <Users className="w-4 h-4 mr-2" />
+                      Manage Users
+                    </Button>
+                  )}
                 </>
               )}
               <div className="w-px h-6 bg-(--border)" />
@@ -422,7 +526,7 @@ export default function DashboardPage() {
                 <TrendingUp className="w-4 h-4 mr-2" />
                 Overview
               </Button>
-              {isAdmin && (
+              {(isAdmin || isClient) && (
                 <Button
                   variant={activeTab === "expenses" ? "primary" : "outline"}
                   size="sm"
@@ -431,6 +535,20 @@ export default function DashboardPage() {
                 >
                   <Receipt className="w-4 h-4 mr-2" />
                   Expenses & ROI
+                </Button>
+              )}
+              {(isAdmin || isClient) && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  fullWidth
+                  onClick={() => {
+                    setAddBarberModalOpen(true);
+                    setMobileMenuOpen(false);
+                  }}
+                >
+                  <Plus className="w-4 h-4 mr-2" />
+                  Add Barber
                 </Button>
               )}
               <Button variant="error" size="sm" fullWidth onClick={logout}>
@@ -767,42 +885,87 @@ export default function DashboardPage() {
               </>
               )}
 
-              {/* Time-based Service Trend - For Cashier */}
-              {!isAdmin && (
+              {/* Service Trends - For Cashier */}
+              {isCashier && (
               <Card className="p-6 mb-6">
-                <h3 className="text-sm font-semibold text-(--text) mb-4">
-                  Today&apos;s Service Timeline
-                </h3>
-                <div className="space-y-3">
-                  {todayTransactions.length > 0 ? (
-                    todayTransactions.map((txn, idx) => (
-                      <div key={txn.id} className="flex items-center gap-4 p-3 rounded-lg bg-(--muted-light) border border-(--border)">
-                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 text-gray-600 font-bold text-sm">
-                          {idx + 1}
-                        </div>
-                        <div className="flex-1">
-                          <div className="flex items-center justify-between">
-                            <span className="font-semibold text-(--text)">{txn.clientName}</span>
-                            <span className="text-sm text-(--muted)">{txn.time}</span>
-                          </div>
-                          <div className="flex items-center gap-3 text-sm text-(--muted)">
-                            <span>{txn.service}</span>
-                            <span>•</span>
-                            <span>{txn.barber}</span>
-                          </div>
-                        </div>
-                        <Badge variant={txn.status === "completed" ? "success" : "warning"}>
-                          {txn.status}
-                        </Badge>
-                      </div>
-                    ))
-                  ) : (
-                    <div className="text-center py-8 text-(--muted)">
-                      <Clock3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
-                      <p>No services today</p>
-                    </div>
-                  )}
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                  <h3 className="text-sm font-semibold text-(--text)">
+                    Today&apos;s Service Trends
+                  </h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-(--muted)">Chart</span>
+                    <Button
+                      size="sm"
+                      variant={serviceTrendChartType === "bar" ? "primary" : "outline"}
+                      onClick={() => setServiceTrendChartType("bar")}
+                    >
+                      Bar
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant={serviceTrendChartType === "area" ? "primary" : "outline"}
+                      onClick={() => setServiceTrendChartType("area")}
+                    >
+                      Area
+                    </Button>
+                  </div>
                 </div>
+                {todayTransactions.length > 0 ? (
+                  <div className="space-y-4">
+                    <div className="flex flex-col sm:flex-row gap-3 text-center">
+                      {serviceTrendData.map((row) => (
+                        <div key={row.label} className="flex-1 rounded-lg border border-(--border) p-3">
+                          <p className="text-xs text-(--muted)">{row.label}</p>
+                          <p className="text-2xl font-bold text-(--text)">{row.count}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <ResponsiveContainer width="100%" height={220}>
+                      {serviceTrendChartType === "bar" ? (
+                        <BarChart data={serviceTrendData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
+                          <YAxis allowDecimals={false} stroke="#64748b" fontSize={12} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "white",
+                              border: "1px solid #e2e8f0",
+                              borderRadius: "8px",
+                            }}
+                            formatter={(value) => [`${value} services`, "Count"]}
+                          />
+                          <Bar dataKey="count" fill="#737373" radius={[4, 4, 0, 0]} />
+                        </BarChart>
+                      ) : (
+                        <AreaChart data={serviceTrendData}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                          <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
+                          <YAxis allowDecimals={false} stroke="#64748b" fontSize={12} />
+                          <Tooltip
+                            contentStyle={{
+                              backgroundColor: "white",
+                              border: "1px solid #e2e8f0",
+                              borderRadius: "8px",
+                            }}
+                            formatter={(value) => [`${value} services`, "Count"]}
+                          />
+                          <Area
+                            type="monotone"
+                            dataKey="count"
+                            stroke="#737373"
+                            fill="#e5e5e5"
+                            strokeWidth={2}
+                          />
+                        </AreaChart>
+                      )}
+                    </ResponsiveContainer>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-(--muted)">
+                    <Clock3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                    <p>No services today</p>
+                  </div>
+                )}
               </Card>
               )}
             </>
@@ -828,13 +991,20 @@ export default function DashboardPage() {
                         <Building className="w-5 h-5 text-(--brand)" />
                         <span className="font-semibold text-(--text)">All Branches</span>
                       </div>
-                      <p className="text-xs text-(--muted)">Combined data from all locations</p>
+                      {(() => {
+                        const allSummary = getBranchFinancialSummary();
+                        return (
+                          <div className="space-y-1 text-xs text-(--muted)">
+                            <p>Revenue: {formatCurrency(allSummary.revenue)}</p>
+                            <p>Expenses: {formatCurrency(allSummary.expenses)}</p>
+                            <p>ROI: {allSummary.roi.toFixed(1)}%</p>
+                          </div>
+                        );
+                      })()}
                     </button>
                     {/* Individual Branch Cards */}
                     {branches.map((branch) => {
-                      const branchExpenses = filteredExpenses
-                        .filter(e => (e.branch || "Main Branch") === branch)
-                        .reduce((sum, e) => sum + e.electricity + e.water + e.rent + e.other, 0);
+                      const branchSummary = getBranchFinancialSummary(branch);
                       return (
                         <button
                           key={branch}
@@ -849,7 +1019,11 @@ export default function DashboardPage() {
                             <Building className="w-5 h-5 text-(--brand)" />
                             <span className="font-semibold text-(--text) truncate">{branch}</span>
                           </div>
-                          <p className="text-xs text-(--muted)">Expenses: {formatCurrency(branchExpenses)}</p>
+                          <div className="space-y-1 text-xs text-(--muted)">
+                            <p>Revenue: {formatCurrency(branchSummary.revenue)}</p>
+                            <p>Expenses: {formatCurrency(branchSummary.expenses)}</p>
+                            <p>ROI: {branchSummary.roi.toFixed(1)}%</p>
+                          </div>
                         </button>
                       );
                     })}
@@ -1016,7 +1190,7 @@ export default function DashboardPage() {
                   {expenseChartType === "bar" ? (
                     <BarChart data={monthlyExpenses}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
                       <YAxis stroke="#64748b" fontSize={12} />
                       <Tooltip
                         contentStyle={{
@@ -1035,7 +1209,7 @@ export default function DashboardPage() {
                   ) : (
                     <LineChart data={monthlyExpenses}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="month" stroke="#64748b" fontSize={12} />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
                       <YAxis stroke="#64748b" fontSize={12} />
                       <Tooltip
                         contentStyle={{
@@ -1075,7 +1249,7 @@ export default function DashboardPage() {
                     <tbody>
                       {monthlyFinancials.map((row) => (
                         <TableRow key={row.month}>
-                          <TableCell className="font-medium">{row.month}</TableCell>
+                          <TableCell className="font-medium">{row.label}</TableCell>
                           <TableCell>{formatCurrency(row.revenue)}</TableCell>
                           <TableCell>{formatCurrency(row.expenses)}</TableCell>
                           <TableCell className={row.roi >= 0 ? "text-green-600" : "text-yellow-600"}>
@@ -1283,7 +1457,7 @@ export default function DashboardPage() {
                         setSearchTerm("");
                         setStartDate("");
                         setEndDate("");
-                        setSelectedBranch("all");
+                        setSelectedBranch(isClient && user.branch ? user.branch : "all");
                         setCurrentPage(1);
                       }}
                     >
@@ -1562,7 +1736,7 @@ export default function DashboardPage() {
               Step 1: Choose a Barber
             </h3>
             <div className="grid grid-cols-2 gap-3">
-              {mockData.barbers.map((barber) => (
+              {barbers.map((barber) => (
                 <button
                   key={barber.id}
                   onClick={() => setSelectedBarber(barber.id)}
@@ -1586,7 +1760,7 @@ export default function DashboardPage() {
             <h3 className="text-base font-semibold text-(--text) text-center">
               Step 2: Choose a Service
             </h3>
-            {mockData.services.map((service) => (
+            {SERVICES.map((service) => (
               <button
                 key={service.id}
                 onClick={() => setSelectedService(service.id)}
@@ -1616,12 +1790,12 @@ export default function DashboardPage() {
             <div className="bg-(--muted-light) p-4 rounded-xl space-y-2">
               <p className="text-sm text-(--muted)">
                 Barber: <span className="font-semibold text-(--text)">
-                  {mockData.barbers.find((b) => b.id === selectedBarber)?.name}
+                  {barbers.find((b) => b.id === selectedBarber)?.name}
                 </span>
               </p>
               <p className="text-sm text-(--muted)">
                 Service: <span className="font-semibold text-(--text)">
-                  {mockData.services.find((s) => s.id === selectedService)?.name}
+                  {SERVICES.find((s) => s.id === selectedService)?.name}
                 </span>
               </p>
             </div>
@@ -1646,13 +1820,13 @@ export default function DashboardPage() {
               <div className="flex justify-between text-sm">
                 <span className="text-(--muted)">Barber</span>
                 <span className="font-semibold text-(--text)">
-                  {mockData.barbers.find((b) => b.id === selectedBarber)?.name}
+                  {barbers.find((b) => b.id === selectedBarber)?.name}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-(--muted)">Service</span>
                 <span className="font-semibold text-(--text)">
-                  {mockData.services.find((s) => s.id === selectedService)?.name}
+                  {SERVICES.find((s) => s.id === selectedService)?.name}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
@@ -1662,7 +1836,7 @@ export default function DashboardPage() {
               <div className="flex justify-between pt-3 border-t border-(--border)">
                 <span className="font-medium text-(--text)">Total Cost</span>
                 <span className="font-bold text-(--brand)">
-                  ₱{mockData.services.find((s) => s.id === selectedService)?.price.toLocaleString()}
+                  ₱{SERVICES.find((s) => s.id === selectedService)?.price.toLocaleString()}
                 </span>
               </div>
             </Card>
@@ -1725,21 +1899,21 @@ export default function DashboardPage() {
         </div>
       </Modal>
 
-      {/* Add Cashier Modal */}
+      {/* Add Barber Modal */}
       <Modal
-        isOpen={addCashierModalOpen}
+        isOpen={addBarberModalOpen}
         onClose={() => {
-          setAddCashierModalOpen(false);
-          setNewCashier({ username: "", password: "", branch: "Main Branch" });
+          setAddBarberModalOpen(false);
+          setNewBarber({ name: "", specialty: "Haircut", branch: "Main Branch" });
         }}
-        title="Add New Cashier"
+        title="Add Barber"
         footer={
           <div className="flex gap-2 w-full">
             <Button
               variant="outline"
               onClick={() => {
-                setAddCashierModalOpen(false);
-                setNewCashier({ username: "", password: "", branch: "Main Branch" });
+                setAddBarberModalOpen(false);
+                setNewBarber({ name: "", specialty: "Haircut", branch: "Main Branch" });
               }}
               className="flex-1"
             >
@@ -1748,20 +1922,116 @@ export default function DashboardPage() {
             <Button
               variant="primary"
               onClick={() => {
-                if (newCashier.username && newCashier.password) {
-                  addCashier({
-                    username: newCashier.username,
-                    password: newCashier.password,
-                    role: "cashier",
-                    branch: newCashier.branch,
-                  });
-                  setNewCashier({ username: "", password: "", branch: "Main Branch" });
-                  setAddCashierModalOpen(false);
+                if (newBarber.name.trim()) {
+                  setBarbers([
+                    ...barbers,
+                    {
+                      id: `barber_${Date.now()}`,
+                      name: newBarber.name.trim(),
+                      avatar: "👤",
+                      specialty: newBarber.specialty,
+                      branch: newBarber.branch,
+                    },
+                  ]);
+                  setNewBarber({ name: "", specialty: "Haircut", branch: "Main Branch" });
+                  setAddBarberModalOpen(false);
                 }
               }}
               className="flex-1"
             >
-              Add Cashier
+              Add Barber
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          <Input
+            type="text"
+            label="Barber Name"
+            placeholder="Enter barber name"
+            value={newBarber.name}
+            onChange={(e) => setNewBarber({ ...newBarber, name: e.target.value })}
+            icon={<User className="w-4 h-4" />}
+          />
+          <div>
+            <label className="text-sm font-medium text-(--muted) mb-1.5 block">
+              <Scissors className="w-4 h-4 inline mr-1" />
+              Specialty
+            </label>
+            <select
+              value={newBarber.specialty}
+              onChange={(e) =>
+                setNewBarber({
+                  ...newBarber,
+                  specialty: e.target.value as typeof BARBER_SPECIALTIES[number],
+                })
+              }
+              className="w-full rounded-lg border border-(--border) bg-white px-4 py-2.5 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)"
+            >
+              {BARBER_SPECIALTIES.map((specialty) => (
+                <option key={specialty} value={specialty}>
+                  {specialty}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="text-sm font-medium text-(--muted) mb-1.5 block">
+              <Building className="w-4 h-4 inline mr-1" />
+              Branch Location
+            </label>
+            <select
+              value={newBarber.branch}
+              onChange={(e) => setNewBarber({ ...newBarber, branch: e.target.value })}
+              className="w-full rounded-lg border border-(--border) bg-white px-4 py-2.5 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)"
+            >
+              {branches.map((branch) => (
+                <option key={branch} value={branch}>
+                  {branch}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Add User Modal */}
+      <Modal
+        isOpen={addUserModalOpen}
+        onClose={() => {
+          setAddUserModalOpen(false);
+          setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
+        }}
+        title="Add New User"
+        footer={
+          <div className="flex gap-2 w-full">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setAddUserModalOpen(false);
+                setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
+              }}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={() => {
+                if (newUser.username && newUser.password) {
+                  addUser({
+                    username: newUser.username,
+                    password: newUser.password,
+                    role: newUser.role,
+                    branch: newUser.branch,
+                  });
+                  setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
+                  setAddUserModalOpen(false);
+                }
+              }}
+              className="flex-1"
+            >
+              Add User
             </Button>
           </div>
         }
@@ -1771,26 +2041,46 @@ export default function DashboardPage() {
             type="text"
             label="Username"
             placeholder="Enter username"
-            value={newCashier.username}
-            onChange={(e) => setNewCashier({ ...newCashier, username: e.target.value })}
+            value={newUser.username}
+            onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
             icon={<User className="w-4 h-4" />}
           />
           <Input
             type="password"
             label="Password"
             placeholder="Enter password"
-            value={newCashier.password}
-            onChange={(e) => setNewCashier({ ...newCashier, password: e.target.value })}
+            value={newUser.password}
+            onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
             icon={<User className="w-4 h-4" />}
           />
+          <div>
+            <label className="text-sm font-medium text-(--muted) mb-1.5 block">
+              <Users className="w-4 h-4 inline mr-1" />
+              Role
+            </label>
+            <select
+              value={newUser.role}
+              onChange={(e) =>
+                setNewUser({
+                  ...newUser,
+                  role: e.target.value as "admin" | "cashier" | "client",
+                })
+              }
+              className="w-full rounded-lg border border-(--border) bg-white px-4 py-2.5 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)"
+            >
+              <option value="admin">Admin</option>
+              <option value="cashier">Cashier</option>
+              <option value="client">Client</option>
+            </select>
+          </div>
           <div>
             <label className="text-sm font-medium text-(--muted) mb-1.5 block">
               <Building className="w-4 h-4 inline mr-1" />
               Branch Location
             </label>
             <select
-              value={newCashier.branch}
-              onChange={(e) => setNewCashier({ ...newCashier, branch: e.target.value })}
+              value={newUser.branch}
+              onChange={(e) => setNewUser({ ...newUser, branch: e.target.value })}
               className="w-full rounded-lg border border-(--border) bg-white px-4 py-2.5 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)"
             >
               {branches.map((branch) => (
@@ -1799,24 +2089,30 @@ export default function DashboardPage() {
             </select>
           </div>
 
-          {/* Existing Cashiers List */}
-          {cashiers.length > 0 && (
+          {/* Existing Users List */}
+          {users.length > 0 && (
             <div className="mt-6 pt-4 border-t border-(--border)">
-              <h4 className="text-sm font-semibold text-(--text) mb-3">Existing Cashiers</h4>
+              <h4 className="text-sm font-semibold text-(--text) mb-3">Existing Users</h4>
               <div className="space-y-2 max-h-40 overflow-y-auto">
-                {cashiers.map((cashier) => (
-                  <div key={cashier.id} className="flex items-center justify-between p-2 rounded-lg bg-(--muted-light)">
+                {users.map((storedUser) => (
+                  <div key={storedUser.id} className="flex items-center justify-between p-2 rounded-lg bg-(--muted-light)">
                     <div>
-                      <p className="text-sm font-medium text-(--text)">{cashier.username}</p>
+                      <p className="text-sm font-medium text-(--text)">{storedUser.username}</p>
                       <p className="text-xs text-(--muted) flex items-center gap-1">
-                        <Building className="w-3 h-3" />
-                        {cashier.branch}
+                        <Users className="w-3 h-3" />
+                        {storedUser.role}
                       </p>
+                      {storedUser.branch && (
+                        <p className="text-xs text-(--muted) flex items-center gap-1">
+                        <Building className="w-3 h-3" />
+                        {storedUser.branch}
+                        </p>
+                      )}
                     </div>
                     <Button
                       variant="ghost"
                       size="sm"
-                      onClick={() => deleteCashier(cashier.username)}
+                      onClick={() => deleteUser(storedUser.username)}
                       className="text-yellow-600 hover:text-yellow-700"
                     >
                       <Trash2 className="w-4 h-4" />

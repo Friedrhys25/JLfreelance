@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 
-type Role = "admin" | "cashier" | null;
+type Role = "admin" | "cashier" | "client" | null;
 
 interface User {
   username: string;
@@ -11,12 +11,12 @@ interface User {
   branch?: string;
 }
 
-interface CashierUser {
+interface StoredUser {
   id: string;
   username: string;
   password: string;
-  role: "cashier";
-  branch: string;
+  role: Exclude<Role, null>;
+  branch?: string;
   createdAt: string;
 }
 
@@ -26,10 +26,11 @@ interface AuthContextType {
   logout: () => void;
   isAdmin: boolean;
   isCashier: boolean;
+  isClient: boolean;
   isAuthenticated: boolean;
-  cashiers: CashierUser[];
-  addCashier: (cashier: Omit<CashierUser, "id" | "createdAt">) => void;
-  deleteCashier: (username: string) => void;
+  users: StoredUser[];
+  addUser: (user: Omit<StoredUser, "id" | "createdAt">) => void;
+  deleteUser: (username: string) => void;
   branches: string[];
 }
 
@@ -38,7 +39,6 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 // Valid credentials
 const VALID_CREDENTIALS = {
   admin: { username: "admin", password: "admin", role: "admin" as Role, branch: "Head Office" },
-  cashier: { username: "cashier", password: "cashier", role: "cashier" as Role, branch: "Main Branch" },
 };
 
 const DEFAULT_BRANCHES = ["Main Branch", "Downtown Branch", "Westside Branch"];
@@ -49,23 +49,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     role: null,
     branch: undefined,
   });
-  const [cashiers, setCashiers] = useState<CashierUser[]>([]);
+  const [users, setUsers] = useState<StoredUser[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const router = useRouter();
 
   useEffect(() => {
     // Check for stored session
     const storedUser = localStorage.getItem("barbershop_user");
+    const storedUsers = localStorage.getItem("barbershop_users");
     const storedCashiers = localStorage.getItem("barbershop_cashiers");
     
     if (storedUser) {
       setUser(JSON.parse(storedUser));
     }
-    if (storedCashiers) {
-      setCashiers(JSON.parse(storedCashiers));
+    if (storedUsers) {
+      setUsers(JSON.parse(storedUsers));
+    } else if (storedCashiers) {
+      const migratedUsers: StoredUser[] = JSON.parse(storedCashiers).map(
+        (cashier: StoredUser) => ({
+          ...cashier,
+          role: "cashier",
+        })
+      );
+      setUsers(migratedUsers);
+      localStorage.setItem("barbershop_users", JSON.stringify(migratedUsers));
     } else {
       // Initialize with default cashier
-      const defaultCashier: CashierUser = {
+      const defaultCashier: StoredUser = {
         id: "cashier_001",
         username: "cashier",
         password: "cashier",
@@ -73,8 +83,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         branch: "Main Branch",
         createdAt: new Date().toISOString(),
       };
-      setCashiers([defaultCashier]);
-      localStorage.setItem("barbershop_cashiers", JSON.stringify([defaultCashier]));
+      setUsers([defaultCashier]);
+      localStorage.setItem("barbershop_users", JSON.stringify([defaultCashier]));
     }
     setIsLoading(false);
   }, []);
@@ -93,13 +103,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       return true;
     }
 
-    // Check cashier credentials from stored cashiers
-    const cashier = cashiers.find((c) => c.username === username && c.password === password);
-    if (cashier) {
+    // Check stored users
+    const matchedUser = users.find((u) => u.username === username && u.password === password);
+    if (matchedUser) {
       const userData: User = { 
-        username: cashier.username, 
-        role: cashier.role,
-        branch: cashier.branch,
+        username: matchedUser.username, 
+        role: matchedUser.role,
+        branch: matchedUser.branch,
       };
       setUser(userData);
       localStorage.setItem("barbershop_user", JSON.stringify(userData));
@@ -116,21 +126,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     router.push("/login");
   };
 
-  const addCashier = (cashierData: Omit<CashierUser, "id" | "createdAt">) => {
-    const newCashier: CashierUser = {
-      ...cashierData,
-      id: `cashier_${Date.now()}`,
+  const addUser = (userData: Omit<StoredUser, "id" | "createdAt">) => {
+    const newUser: StoredUser = {
+      ...userData,
+      id: `user_${Date.now()}`,
       createdAt: new Date().toISOString(),
     };
-    const updatedCashiers = [...cashiers, newCashier];
-    setCashiers(updatedCashiers);
-    localStorage.setItem("barbershop_cashiers", JSON.stringify(updatedCashiers));
+    const updatedUsers = [...users, newUser];
+    setUsers(updatedUsers);
+    localStorage.setItem("barbershop_users", JSON.stringify(updatedUsers));
   };
 
-  const deleteCashier = (username: string) => {
-    const updatedCashiers = cashiers.filter((c) => c.username !== username);
-    setCashiers(updatedCashiers);
-    localStorage.setItem("barbershop_cashiers", JSON.stringify(updatedCashiers));
+  const deleteUser = (username: string) => {
+    const updatedUsers = users.filter((u) => u.username !== username);
+    setUsers(updatedUsers);
+    localStorage.setItem("barbershop_users", JSON.stringify(updatedUsers));
   };
 
   const value = {
@@ -139,10 +149,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     logout,
     isAdmin: user.role === "admin",
     isCashier: user.role === "cashier",
+    isClient: user.role === "client",
     isAuthenticated: user.role !== null,
-    cashiers,
-    addCashier,
-    deleteCashier,
+    users,
+    addUser,
+    deleteUser,
     branches: DEFAULT_BRANCHES,
   };
 
