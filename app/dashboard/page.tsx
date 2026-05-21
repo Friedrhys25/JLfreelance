@@ -63,6 +63,7 @@ import {
 } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { Filter, BarChart2 } from "lucide-react";
+import dashboardData from "@/data/mockData.json";
 
 interface Transaction {
   id: string;
@@ -86,6 +87,20 @@ interface Expense {
   branch?: string;
 }
 
+interface Service {
+  id: string;
+  name: string;
+  price: number;
+  duration: string;
+}
+
+interface Barber {
+  id: string;
+  name: string;
+  avatar: string;
+  specialty: string;
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const { user, logout, isAdmin, isCashier, isAuthenticated, cashiers, addCashier, deleteCashier, branches } = useAuth();
@@ -98,8 +113,8 @@ export default function DashboardPage() {
   const [selectedBarber, setSelectedBarber] = useState<string | null>(null);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [clientName, setClientName] = useState("");
-  const [transactions, setTransactions] = useState<Transaction[]>([]);
-  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>(dashboardData.transactions as Transaction[]);
+  const [expenses, setExpenses] = useState<Expense[]>(dashboardData.expenses as Expense[]);
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
@@ -141,16 +156,8 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    fetch("/data/mockData.json")
-      .then((res) => res.json())
-      .then((data) => {
-        setTransactions(data.transactions);
-        setExpenses(data.expenses);
-      })
-      .catch(() => {
-        setTransactions([]);
-        setExpenses([]);
-      });
+    setTransactions(dashboardData.transactions as Transaction[]);
+    setExpenses(dashboardData.expenses as Expense[]);
   }, []);
 
   const formatCurrency = (amount: number) => {
@@ -230,7 +237,8 @@ export default function DashboardPage() {
       t.service.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesStartDate = startDate ? t.date >= startDate : true;
     const matchesEndDate = endDate ? t.date <= endDate : true;
-    return matchesSearch && matchesStartDate && matchesEndDate;
+    const matchesBranch = selectedBranch === "all" || (t.branch || "Main Branch") === selectedBranch;
+    return matchesSearch && matchesStartDate && matchesEndDate && matchesBranch;
   });
 
   // Pagination
@@ -242,13 +250,13 @@ export default function DashboardPage() {
 
   // Revenue calculations
   const totalRevenue = filteredTransactions.reduce((sum, t) => sum + t.cost, 0);
-  const todayTransactions = transactions.filter(
+  const todayTransactions = filteredTransactions.filter(
     (t) => t.date === new Date().toISOString().split("T")[0]
   );
   const todayRevenue = todayTransactions.reduce((sum, t) => sum + t.cost, 0);
 
-  // Monthly revenue for charts
-  const monthlyRevenue = transactions.reduce((acc, t) => {
+  // Monthly revenue for charts (filtered by branch)
+  const monthlyRevenue = filteredTransactions.reduce((acc, t) => {
     const month = t.date.substring(0, 7);
     acc[month] = (acc[month] || 0) + t.cost;
     return acc;
@@ -259,8 +267,8 @@ export default function DashboardPage() {
     revenue,
   }));
 
-  // Service breakdown for pie chart
-  const serviceBreakdown = transactions.reduce((acc, t) => {
+  // Service breakdown for pie chart (filtered by branch)
+  const serviceBreakdown = filteredTransactions.reduce((acc, t) => {
     acc[t.service] = (acc[t.service] || 0) + t.cost;
     return acc;
   }, {} as Record<string, number>);
@@ -270,14 +278,18 @@ export default function DashboardPage() {
     value,
   }));
 
-  const COLORS = ["#2563eb", "#10b981", "#f59e0b", "#ef4444"];
+  const COLORS = ["#737373", "#16a34a", "#f59e0b", "#fbbf24"];
 
-  // Expense calculations
-  const currentMonthExpenses = expenses.find((e) => e.month === new Date().toISOString().substring(0, 7));
+  // Expense calculations (filtered by branch)
+  const filteredExpenses = selectedBranch === "all" 
+    ? expenses 
+    : expenses.filter((e) => (e.branch || "Main Branch") === selectedBranch);
+  
+  const currentMonthExpenses = filteredExpenses.find((e) => e.month === new Date().toISOString().substring(0, 7));
   const totalExpenses = currentMonthExpenses
     ? currentMonthExpenses.electricity + currentMonthExpenses.water + currentMonthExpenses.rent + currentMonthExpenses.other
     : 0;
-  const monthlyExpenses = expenses.map((e) => ({
+  const monthlyExpenses = filteredExpenses.map((e) => ({
     month: new Date(e.month).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
     electricity: e.electricity,
     water: e.water,
@@ -285,7 +297,7 @@ export default function DashboardPage() {
     other: e.other,
     total: e.electricity + e.water + e.rent + e.other,
   }));
-  const monthlyFinancials = expenses.map((e) => {
+  const monthlyFinancials = filteredExpenses.map((e) => {
     const revenue = monthlyRevenue[e.month] || 0;
     const total = e.electricity + e.water + e.rent + e.other;
     const roiValue = total > 0 ? ((revenue - total) / total) * 100 : 0;
@@ -297,11 +309,11 @@ export default function DashboardPage() {
     };
   });
 
-  // ROI Calculation
-  const currentMonthRevenue = transactions
+  // ROI Calculation (filtered by branch)
+  const currentMonthRevenue = filteredTransactions
     .filter((t) => t.date.startsWith(new Date().toISOString().substring(0, 7)))
     .reduce((sum, t) => sum + t.cost, 0);
-  
+
   const netProfit = currentMonthRevenue - totalExpenses;
   const roi = totalExpenses > 0 ? ((netProfit / totalExpenses) * 100) : 0;
 
@@ -309,9 +321,9 @@ export default function DashboardPage() {
   const BARBER_SHARE = 0.6;
   const SHOP_SHARE = 0.4;
 
-  // Barber performance with 60/40 split
+  // Barber performance with 60/40 split (filtered by branch)
   const barberPerformance = mockData.barbers.map((barber) => {
-    const barberTransactions = transactions.filter((t) => t.barber === barber.name);
+    const barberTransactions = filteredTransactions.filter((t) => t.barber === barber.name);
     const totalRevenue = barberTransactions.reduce((sum, t) => sum + t.cost, 0);
     const barberShare = totalRevenue * BARBER_SHARE;
     const shopShare = totalRevenue * SHOP_SHARE;
@@ -329,22 +341,22 @@ export default function DashboardPage() {
   const totalShopShare = totalRevenue * SHOP_SHARE;
 
   return (
-    <div className="min-h-screen bg-[var(--page-bg)]">
+    <div className="min-h-screen bg-(--page-bg)">
       {/* Top Navigation */}
-      <nav className="sticky top-0 z-40 border-b border-[var(--border)] bg-white/80 backdrop-blur-md">
+      <nav className="sticky top-0 z-40 border-b border-(--border) bg-white/80 backdrop-blur-md">
         <div className="container mx-auto px-4 py-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-br from-[var(--brand)] to-[var(--brand-strong)] p-2 rounded-xl shadow-sm">
+              <div className="bg-linear-to-br from-(--brand) to-(--brand-strong) p-2 rounded-xl shadow-sm">
                 <Scissors className="w-5 h-5 text-white" />
               </div>
               <div className="hidden sm:block">
-                <span className="text-lg font-semibold text-[var(--text)] block">
+                <span className="text-lg font-semibold text-(--text) block">
                   Barbershop POS
                 </span>
-                <span className="text-xs text-[var(--muted)] capitalize">{user.role} view</span>
+                <span className="text-xs text-(--muted) capitalize">{user.role} view</span>
                 {user.branch && (
-                  <span className="text-xs text-[var(--brand)] flex items-center gap-1 mt-0.5">
+                  <span className="text-xs text-(--brand) flex items-center gap-1 mt-0.5">
                     <Building className="w-3 h-3" />
                     {user.branch}
                   </span>
@@ -381,7 +393,7 @@ export default function DashboardPage() {
                   </Button>
                 </>
               )}
-              <div className="w-px h-6 bg-[var(--border)]" />
+              <div className="w-px h-6 bg-(--border)" />
               <Button variant="ghost" size="sm" onClick={logout}>
                 <LogOut className="w-4 h-4" />
               </Button>
@@ -389,18 +401,18 @@ export default function DashboardPage() {
 
             <button
               onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden p-2 rounded-lg border border-[var(--border)] bg-white"
+              className="md:hidden p-2 rounded-lg border border-(--border) bg-white"
             >
               {mobileMenuOpen ? (
-                <X className="w-5 h-5 text-[var(--text)]" />
+                <X className="w-5 h-5 text-(--text)" />
               ) : (
-                <Menu className="w-5 h-5 text-[var(--text)]" />
+                <Menu className="w-5 h-5 text-(--text)" />
               )}
             </button>
           </div>
 
           {mobileMenuOpen && (
-            <div className="md:hidden mt-4 pb-4 border-t border-[var(--border)] pt-4 flex flex-col gap-2">
+            <div className="md:hidden mt-4 pb-4 border-t border-(--border) pt-4 flex flex-col gap-2">
               <Button
                 variant={activeTab === "overview" ? "primary" : "outline"}
                 size="sm"
@@ -436,10 +448,10 @@ export default function DashboardPage() {
         <div className="mb-8">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
             <div>
-              <h1 className="text-3xl font-bold text-[var(--text)] mb-1">
+              <h1 className="text-3xl font-bold text-(--text) mb-1">
                 Dashboard
               </h1>
-              <p className="text-sm text-[var(--muted)]">
+              <p className="text-sm text-(--muted)">
                 {isAdmin 
                   ? "Manage queue, view transactions, and track expenses" 
                   : "Manage queue and view daily transactions"}
@@ -473,20 +485,66 @@ export default function DashboardPage() {
 
           {activeTab === "overview" && (
             <>
+              {/* Branch Selector Cards - Admin Only */}
+              {isAdmin && (
+                <div className="mb-6">
+                  <p className="text-sm font-semibold text-(--text) mb-3">Select Branch to View Data</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {/* All Branches Card */}
+                    <button
+                      onClick={() => setSelectedBranch("all")}
+                      className={`p-4 rounded-xl border-2 transition-all text-left ${
+                        selectedBranch === "all"
+                          ? "border-(--brand) bg-(--primary-light)"
+                          : "border-(--border) bg-white hover:border-(--brand)"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Building className="w-5 h-5 text-(--brand)" />
+                        <span className="font-semibold text-(--text)">All Branches</span>
+                      </div>
+                      <p className="text-xs text-(--muted)">Combined data from all locations</p>
+                    </button>
+                    {/* Individual Branch Cards */}
+                    {branches.map((branch) => {
+                      const branchTxnCount = transactions.filter(t => (t.branch || "Main Branch") === branch && t.status === "completed").length;
+                      const branchRevenue = transactions.filter(t => (t.branch || "Main Branch") === branch && t.status === "completed").reduce((sum, t) => sum + t.cost, 0);
+                      return (
+                        <button
+                          key={branch}
+                          onClick={() => setSelectedBranch(branch)}
+                          className={`p-4 rounded-xl border-2 transition-all text-left ${
+                            selectedBranch === branch
+                              ? "border-(--brand) bg-(--primary-light)"
+                              : "border-(--border) bg-white hover:border-(--brand)"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <Building className="w-5 h-5 text-(--brand)" />
+                            <span className="font-semibold text-(--text) truncate">{branch}</span>
+                          </div>
+                          <p className="text-xs text-(--muted)">{branchTxnCount} services • {formatCurrency(branchRevenue)}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* Stats Cards */}
               <div className={`grid gap-4 mb-6 ${isAdmin ? "grid-cols-1 sm:grid-cols-2 lg:grid-cols-4" : "grid-cols-1 sm:grid-cols-2"}`}>
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Today&apos;s Services
                       </p>
-                      <p className="text-3xl font-bold text-[var(--text)]">
+                      <p className="text-3xl font-bold text-(--text)">
                         {todayTransactions.length}
                       </p>
                     </div>
-                    <div className="bg-blue-100 p-3 rounded-xl">
-                      <Calendar className="w-6 h-6 text-blue-600" />
+                    <div className="bg-gray-100 p-3 rounded-xl">
+                      <Calendar className="w-6 h-6 text-gray-600" />
                     </div>
                   </div>
                 </Card>
@@ -495,15 +553,15 @@ export default function DashboardPage() {
                   <Card className="p-5">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                           Today&apos;s Revenue
                         </p>
-                        <p className="text-3xl font-bold text-[var(--text)]">
+                        <p className="text-3xl font-bold text-(--text)">
                           {formatCurrency(todayRevenue)}
                         </p>
                       </div>
-                      <div className="bg-emerald-100 p-3 rounded-xl">
-                        <DollarSign className="w-6 h-6 text-emerald-600" />
+                      <div className="bg-green-100 p-3 rounded-xl">
+                        <DollarSign className="w-6 h-6 text-green-600" />
                       </div>
                     </div>
                   </Card>
@@ -512,15 +570,15 @@ export default function DashboardPage() {
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Total Clients
                       </p>
-                      <p className="text-3xl font-bold text-[var(--text)]">
+                      <p className="text-3xl font-bold text-(--text)">
                         {filteredTransactions.length}
                       </p>
                     </div>
-                    <div className="bg-sky-100 p-3 rounded-xl">
-                      <UserCircle className="w-6 h-6 text-sky-600" />
+                    <div className="bg-gray-100 p-3 rounded-xl">
+                      <UserCircle className="w-6 h-6 text-gray-600" />
                     </div>
                   </div>
                 </Card>
@@ -529,15 +587,15 @@ export default function DashboardPage() {
                   <Card className="p-5">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                        <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                           Total Revenue
                         </p>
-                        <p className="text-3xl font-bold text-[var(--text)]">
+                        <p className="text-3xl font-bold text-(--text)">
                           {formatCurrency(totalRevenue)}
                         </p>
                       </div>
-                      <div className="bg-amber-100 p-3 rounded-xl">
-                        <Scissors className="w-6 h-6 text-amber-600" />
+                      <div className="bg-yellow-100 p-3 rounded-xl">
+                        <Scissors className="w-6 h-6 text-yellow-600" />
                       </div>
                     </div>
                   </Card>
@@ -547,40 +605,40 @@ export default function DashboardPage() {
               {/* Revenue Split Stats - Admin Only */}
               {isAdmin && (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-                <Card className="p-5 border-l-4 border-l-emerald-500">
+                <Card className="p-5 border-l-4 border-l-green-500">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Barbers&apos; Share (60%)
                       </p>
-                      <p className="text-3xl font-bold text-emerald-600">
+                      <p className="text-3xl font-bold text-green-600">
                         {formatCurrency(totalBarberShare)}
                       </p>
-                      <p className="text-xs text-[var(--muted)] mt-1">
+                      <p className="text-xs text-(--muted) mt-1">
                         Total earnings for all barbers
                       </p>
                     </div>
-                    <div className="bg-emerald-100 p-3 rounded-xl">
-                      <UserCircle className="w-6 h-6 text-emerald-600" />
+                    <div className="bg-green-100 p-3 rounded-xl">
+                      <UserCircle className="w-6 h-6 text-green-600" />
                     </div>
                   </div>
                 </Card>
 
-                <Card className="p-5 border-l-4 border-l-blue-500">
+                <Card className="p-5 border-l-4 border-l-gray-500">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Shop Income (40%)
                       </p>
-                      <p className="text-3xl font-bold text-blue-600">
+                      <p className="text-3xl font-bold text-gray-600">
                         {formatCurrency(totalShopShare)}
                       </p>
-                      <p className="text-xs text-[var(--muted)] mt-1">
+                      <p className="text-xs text-(--muted) mt-1">
                         Shop revenue before expenses
                       </p>
                     </div>
-                    <div className="bg-blue-100 p-3 rounded-xl">
-                      <Building className="w-6 h-6 text-blue-600" />
+                    <div className="bg-gray-100 p-3 rounded-xl">
+                      <Building className="w-6 h-6 text-gray-600" />
                     </div>
                   </div>
                 </Card>
@@ -593,12 +651,12 @@ export default function DashboardPage() {
               <Card className="p-5 mb-6">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-[var(--text)]">Chart Choices</p>
-                    <p className="text-xs text-[var(--muted)]">Switch chart types for available datasets.</p>
+                    <p className="text-sm font-semibold text-(--text)">Chart Choices</p>
+                    <p className="text-xs text-(--muted)">Switch chart types for available datasets.</p>
                   </div>
                   <div className="flex flex-wrap gap-4">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-[var(--muted)]">Revenue Trend</span>
+                      <span className="text-xs font-medium text-(--muted)">Revenue Trend</span>
                       <div className="flex gap-2">
                         <Button
                           size="sm"
@@ -617,7 +675,7 @@ export default function DashboardPage() {
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-medium text-[var(--muted)]">Service Breakdown</span>
+                      <span className="text-xs font-medium text-(--muted)">Service Breakdown</span>
                       <Button size="sm" variant="outline" disabled>
                         Pie
                       </Button>
@@ -629,7 +687,7 @@ export default function DashboardPage() {
               {/* Charts Row */}
               <div className="grid lg:grid-cols-2 gap-6 mb-6">
                 <Card className="p-6">
-                  <h3 className="text-sm font-semibold text-[var(--text)] mb-4">
+                  <h3 className="text-sm font-semibold text-(--text) mb-4">
                     Monthly Revenue Trend
                   </h3>
                   <ResponsiveContainer width="100%" height={250}>
@@ -646,7 +704,7 @@ export default function DashboardPage() {
                           }}
                           formatter={(value) => formatCurrency(Number(value || 0))}
                         />
-                        <Bar dataKey="revenue" fill="#2563eb" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="revenue" fill="#737373" radius={[4, 4, 0, 0]} />
                       </BarChart>
                     ) : (
                       <LineChart data={revenueChartData}>
@@ -664,7 +722,7 @@ export default function DashboardPage() {
                         <Line
                           type="monotone"
                           dataKey="revenue"
-                          stroke="#2563eb"
+                          stroke="#737373"
                           strokeWidth={3}
                           dot={{ r: 3 }}
                           activeDot={{ r: 5 }}
@@ -675,7 +733,7 @@ export default function DashboardPage() {
                 </Card>
 
                 <Card className="p-6">
-                  <h3 className="text-sm font-semibold text-[var(--text)] mb-4">
+                  <h3 className="text-sm font-semibold text-(--text) mb-4">
                     Service Revenue Breakdown
                   </h3>
                   <ResponsiveContainer width="100%" height={250}>
@@ -712,22 +770,22 @@ export default function DashboardPage() {
               {/* Time-based Service Trend - For Cashier */}
               {!isAdmin && (
               <Card className="p-6 mb-6">
-                <h3 className="text-sm font-semibold text-[var(--text)] mb-4">
+                <h3 className="text-sm font-semibold text-(--text) mb-4">
                   Today&apos;s Service Timeline
                 </h3>
                 <div className="space-y-3">
                   {todayTransactions.length > 0 ? (
                     todayTransactions.map((txn, idx) => (
-                      <div key={txn.id} className="flex items-center gap-4 p-3 rounded-lg bg-[var(--muted-light)] border border-[var(--border)]">
-                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-600 font-bold text-sm">
+                      <div key={txn.id} className="flex items-center gap-4 p-3 rounded-lg bg-(--muted-light) border border-(--border)">
+                        <div className="flex items-center justify-center w-12 h-12 rounded-full bg-gray-100 text-gray-600 font-bold text-sm">
                           {idx + 1}
                         </div>
                         <div className="flex-1">
                           <div className="flex items-center justify-between">
-                            <span className="font-semibold text-[var(--text)]">{txn.clientName}</span>
-                            <span className="text-sm text-[var(--muted)]">{txn.time}</span>
+                            <span className="font-semibold text-(--text)">{txn.clientName}</span>
+                            <span className="text-sm text-(--muted)">{txn.time}</span>
                           </div>
-                          <div className="flex items-center gap-3 text-sm text-[var(--muted)]">
+                          <div className="flex items-center gap-3 text-sm text-(--muted)">
                             <span>{txn.service}</span>
                             <span>•</span>
                             <span>{txn.barber}</span>
@@ -739,7 +797,7 @@ export default function DashboardPage() {
                       </div>
                     ))
                   ) : (
-                    <div className="text-center py-8 text-[var(--muted)]">
+                    <div className="text-center py-8 text-(--muted)">
                       <Clock3 className="w-12 h-12 mx-auto mb-2 opacity-50" />
                       <p>No services today</p>
                     </div>
@@ -752,20 +810,67 @@ export default function DashboardPage() {
 
           {activeTab === "expenses" && (
             <>
+              {/* Branch Selector Cards - Admin Only */}
+              {isAdmin && (
+                <div className="mb-6">
+                  <p className="text-sm font-semibold text-(--text) mb-3">Select Branch to View Expenses & ROI Data</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {/* All Branches Card */}
+                    <button
+                      onClick={() => setSelectedBranch("all")}
+                      className={`p-4 rounded-xl border-2 transition-all text-left ${
+                        selectedBranch === "all"
+                          ? "border-(--brand) bg-(--primary-light)"
+                          : "border-(--border) bg-white hover:border-(--brand)"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-2">
+                        <Building className="w-5 h-5 text-(--brand)" />
+                        <span className="font-semibold text-(--text)">All Branches</span>
+                      </div>
+                      <p className="text-xs text-(--muted)">Combined data from all locations</p>
+                    </button>
+                    {/* Individual Branch Cards */}
+                    {branches.map((branch) => {
+                      const branchExpenses = filteredExpenses
+                        .filter(e => (e.branch || "Main Branch") === branch)
+                        .reduce((sum, e) => sum + e.electricity + e.water + e.rent + e.other, 0);
+                      return (
+                        <button
+                          key={branch}
+                          onClick={() => setSelectedBranch(branch)}
+                          className={`p-4 rounded-xl border-2 transition-all text-left ${
+                            selectedBranch === branch
+                              ? "border-(--brand) bg-(--primary-light)"
+                              : "border-(--border) bg-white hover:border-(--brand)"
+                          }`}
+                        >
+                          <div className="flex items-center gap-2 mb-2">
+                            <Building className="w-5 h-5 text-(--brand)" />
+                            <span className="font-semibold text-(--text) truncate">{branch}</span>
+                          </div>
+                          <p className="text-xs text-(--muted)">Expenses: {formatCurrency(branchExpenses)}</p>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
               {/* ROI Stats Cards */}
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Monthly Revenue
                       </p>
-                      <p className="text-3xl font-bold text-[var(--text)]">
+                      <p className="text-3xl font-bold text-(--text)">
                         {formatCurrency(currentMonthRevenue)}
                       </p>
                     </div>
-                    <div className="bg-emerald-100 p-3 rounded-xl">
-                      <DollarSign className="w-6 h-6 text-emerald-600" />
+                    <div className="bg-green-100 p-3 rounded-xl">
+                      <DollarSign className="w-6 h-6 text-green-600" />
                     </div>
                   </div>
                 </Card>
@@ -773,15 +878,15 @@ export default function DashboardPage() {
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Monthly Expenses
                       </p>
-                      <p className="text-3xl font-bold text-[var(--text)]">
+                      <p className="text-3xl font-bold text-(--text)">
                         {formatCurrency(totalExpenses)}
                       </p>
                     </div>
-                    <div className="bg-red-100 p-3 rounded-xl">
-                      <Receipt className="w-6 h-6 text-red-600" />
+                    <div className="bg-yellow-100 p-3 rounded-xl">
+                      <Receipt className="w-6 h-6 text-yellow-600" />
                     </div>
                   </div>
                 </Card>
@@ -789,18 +894,18 @@ export default function DashboardPage() {
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Net Profit
                       </p>
-                      <p className={`text-3xl font-bold ${netProfit >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      <p className={`text-3xl font-bold ${netProfit >= 0 ? "text-green-600" : "text-yellow-600"}`}>
                         {formatCurrency(netProfit)}
                       </p>
                     </div>
-                    <div className={`p-3 rounded-xl ${netProfit >= 0 ? "bg-emerald-100" : "bg-red-100"}`}>
+                    <div className={`p-3 rounded-xl ${netProfit >= 0 ? "bg-green-100" : "bg-yellow-100"}`}>
                       {netProfit >= 0 ? (
-                        <TrendingUp className="w-6 h-6 text-emerald-600" />
+                        <TrendingUp className="w-6 h-6 text-green-600" />
                       ) : (
-                        <TrendingDown className="w-6 h-6 text-red-600" />
+                        <TrendingDown className="w-6 h-6 text-yellow-600" />
                       )}
                     </div>
                   </div>
@@ -809,15 +914,15 @@ export default function DashboardPage() {
                 <Card className="p-5">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         ROI
                       </p>
-                      <p className={`text-3xl font-bold ${roi >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      <p className={`text-3xl font-bold ${roi >= 0 ? "text-green-600" : "text-yellow-600"}`}>
                         {roi.toFixed(1)}%
                       </p>
                     </div>
-                    <div className={`p-3 rounded-xl ${roi >= 0 ? "bg-emerald-100" : "bg-red-100"}`}>
-                      <TrendingUp className="w-6 h-6 text-emerald-600" />
+                    <div className={`p-3 rounded-xl ${roi >= 0 ? "bg-green-100" : "bg-yellow-100"}`}>
+                      <TrendingUp className="w-6 h-6 text-green-600" />
                     </div>
                   </div>
                 </Card>
@@ -825,34 +930,34 @@ export default function DashboardPage() {
 
               {/* Revenue Split Stats for Expenses Tab */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
-                <Card className="p-5 border-l-4 border-l-emerald-500">
+                <Card className="p-5 border-l-4 border-l-green-500">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Barbers&apos; Share (60%)
                       </p>
-                      <p className="text-2xl font-bold text-emerald-600">
+                      <p className="text-2xl font-bold text-green-600">
                         {formatCurrency(currentMonthRevenue * BARBER_SHARE)}
                       </p>
                     </div>
-                    <div className="bg-emerald-100 p-2 rounded-xl">
-                      <UserCircle className="w-5 h-5 text-emerald-600" />
+                    <div className="bg-green-100 p-2 rounded-xl">
+                      <UserCircle className="w-5 h-5 text-green-600" />
                     </div>
                   </div>
                 </Card>
 
-                <Card className="p-5 border-l-4 border-l-blue-500">
+                <Card className="p-5 border-l-4 border-l-gray-500">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Shop Income (40%)
                       </p>
-                      <p className="text-2xl font-bold text-blue-600">
+                      <p className="text-2xl font-bold text-gray-600">
                         {formatCurrency(currentMonthRevenue * SHOP_SHARE)}
                       </p>
                     </div>
-                    <div className="bg-blue-100 p-2 rounded-xl">
-                      <Building className="w-5 h-5 text-blue-600" />
+                    <div className="bg-gray-100 p-2 rounded-xl">
+                      <Building className="w-5 h-5 text-gray-600" />
                     </div>
                   </div>
                 </Card>
@@ -860,14 +965,14 @@ export default function DashboardPage() {
                 <Card className="p-5 border-l-4 border-l-purple-500">
                   <div className="flex items-center justify-between">
                     <div>
-                      <p className="text-xs font-medium uppercase tracking-wide text-[var(--muted)] mb-1">
+                      <p className="text-xs font-medium uppercase tracking-wide text-(--muted) mb-1">
                         Shop Net (After Expenses)
                       </p>
-                      <p className={`text-2xl font-bold ${((currentMonthRevenue * SHOP_SHARE) - totalExpenses) >= 0 ? "text-emerald-600" : "text-red-600"}`}>
+                      <p className={`text-2xl font-bold ${((currentMonthRevenue * SHOP_SHARE) - totalExpenses) >= 0 ? "text-green-600" : "text-yellow-600"}`}>
                         {formatCurrency((currentMonthRevenue * SHOP_SHARE) - totalExpenses)}
                       </p>
                     </div>
-                    <div className={`p-2 rounded-xl ${((currentMonthRevenue * SHOP_SHARE) - totalExpenses) >= 0 ? "bg-emerald-100" : "bg-red-100"}`}>
+                    <div className={`p-2 rounded-xl ${((currentMonthRevenue * SHOP_SHARE) - totalExpenses) >= 0 ? "bg-green-100" : "bg-yellow-100"}`}>
                       <Wallet className="w-5 h-5 text-purple-600" />
                     </div>
                   </div>
@@ -877,11 +982,11 @@ export default function DashboardPage() {
               <Card className="p-5 mb-6">
                 <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
                   <div>
-                    <p className="text-sm font-semibold text-[var(--text)]">Chart Choices</p>
-                    <p className="text-xs text-[var(--muted)]">Switch chart types for available datasets.</p>
+                    <p className="text-sm font-semibold text-(--text)">Chart Choices</p>
+                    <p className="text-xs text-(--muted)">Switch chart types for available datasets.</p>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span className="text-xs font-medium text-[var(--muted)]">Expenses Breakdown</span>
+                    <span className="text-xs font-medium text-(--muted)">Expenses Breakdown</span>
                     <div className="flex gap-2">
                       <Button
                         size="sm"
@@ -904,7 +1009,7 @@ export default function DashboardPage() {
 
               {/* Expense Breakdown Chart */}
               <Card className="p-6 mb-6">
-                <h3 className="text-sm font-semibold text-[var(--text)] mb-4">
+                <h3 className="text-sm font-semibold text-(--text) mb-4">
                   Monthly Expenses Breakdown
                 </h3>
                 <ResponsiveContainer width="100%" height={300}>
@@ -923,9 +1028,9 @@ export default function DashboardPage() {
                       />
                       <Legend />
                       <Bar dataKey="electricity" fill="#f59e0b" name="Electricity" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="water" fill="#0ea5e9" name="Water" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="rent" fill="#ef4444" name="Rent" radius={[4, 4, 0, 0]} />
-                      <Bar dataKey="other" fill="#64748b" name="Other" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="water" fill="#22c55e" name="Water" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="rent" fill="#fbbf24" name="Rent" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="other" fill="#737373" name="Other" radius={[4, 4, 0, 0]} />
                     </BarChart>
                   ) : (
                     <LineChart data={monthlyExpenses}>
@@ -942,9 +1047,9 @@ export default function DashboardPage() {
                       />
                       <Legend />
                       <Line type="monotone" dataKey="electricity" stroke="#f59e0b" strokeWidth={2} dot={{ r: 2 }} />
-                      <Line type="monotone" dataKey="water" stroke="#0ea5e9" strokeWidth={2} dot={{ r: 2 }} />
-                      <Line type="monotone" dataKey="rent" stroke="#ef4444" strokeWidth={2} dot={{ r: 2 }} />
-                      <Line type="monotone" dataKey="other" stroke="#64748b" strokeWidth={2} dot={{ r: 2 }} />
+                      <Line type="monotone" dataKey="water" stroke="#22c55e" strokeWidth={2} dot={{ r: 2 }} />
+                      <Line type="monotone" dataKey="rent" stroke="#fbbf24" strokeWidth={2} dot={{ r: 2 }} />
+                      <Line type="monotone" dataKey="other" stroke="#737373" strokeWidth={2} dot={{ r: 2 }} />
                     </LineChart>
                   )}
                 </ResponsiveContainer>
@@ -952,7 +1057,7 @@ export default function DashboardPage() {
 
               <Card className="p-6 mb-6">
                 <div className="flex items-center justify-between mb-4">
-                  <h3 className="text-sm font-semibold text-[var(--text)]">
+                  <h3 className="text-sm font-semibold text-(--text)">
                     Monthly Sales, Expenses, ROI
                   </h3>
                   <Badge variant="neutral">Per Month</Badge>
@@ -973,7 +1078,7 @@ export default function DashboardPage() {
                           <TableCell className="font-medium">{row.month}</TableCell>
                           <TableCell>{formatCurrency(row.revenue)}</TableCell>
                           <TableCell>{formatCurrency(row.expenses)}</TableCell>
-                          <TableCell className={row.roi >= 0 ? "text-emerald-600" : "text-red-600"}>
+                          <TableCell className={row.roi >= 0 ? "text-green-600" : "text-yellow-600"}>
                             {row.roi.toFixed(1)}%
                           </TableCell>
                         </TableRow>
@@ -988,48 +1093,48 @@ export default function DashboardPage() {
                 <div className="grid sm:grid-cols-4 gap-4 mb-6">
                   <Card className="p-4">
                     <div className="flex items-center gap-3 mb-2">
-                      <div className="bg-amber-100 p-2 rounded-lg">
-                        <Zap className="w-5 h-5 text-amber-600" />
+                      <div className="bg-yellow-100 p-2 rounded-lg">
+                        <Zap className="w-5 h-5 text-yellow-600" />
                       </div>
-                      <span className="text-sm font-medium text-[var(--muted)]">Electricity</span>
+                      <span className="text-sm font-medium text-(--muted)">Electricity</span>
                     </div>
-                    <p className="text-xl font-bold text-[var(--text)]">
+                    <p className="text-xl font-bold text-(--text)">
                       {formatCurrency(currentMonthExpenses.electricity)}
                     </p>
                   </Card>
 
                   <Card className="p-4">
                     <div className="flex items-center gap-3 mb-2">
-                      <div className="bg-sky-100 p-2 rounded-lg">
-                        <Droplet className="w-5 h-5 text-sky-600" />
+                      <div className="bg-green-100 p-2 rounded-lg">
+                        <Droplet className="w-5 h-5 text-green-600" />
                       </div>
-                      <span className="text-sm font-medium text-[var(--muted)]">Water</span>
+                      <span className="text-sm font-medium text-(--muted)">Water</span>
                     </div>
-                    <p className="text-xl font-bold text-[var(--text)]">
+                    <p className="text-xl font-bold text-(--text)">
                       {formatCurrency(currentMonthExpenses.water)}
                     </p>
                   </Card>
 
                   <Card className="p-4">
                     <div className="flex items-center gap-3 mb-2">
-                      <div className="bg-red-100 p-2 rounded-lg">
-                        <Building className="w-5 h-5 text-red-600" />
+                      <div className="bg-yellow-100 p-2 rounded-lg">
+                        <Building className="w-5 h-5 text-yellow-600" />
                       </div>
-                      <span className="text-sm font-medium text-[var(--muted)]">Rent</span>
+                      <span className="text-sm font-medium text-(--muted)">Rent</span>
                     </div>
-                    <p className="text-xl font-bold text-[var(--text)]">
+                    <p className="text-xl font-bold text-(--text)">
                       {formatCurrency(currentMonthExpenses.rent)}
                     </p>
                   </Card>
 
                   <Card className="p-4">
                     <div className="flex items-center gap-3 mb-2">
-                      <div className="bg-slate-100 p-2 rounded-lg">
-                        <Receipt className="w-5 h-5 text-slate-600" />
+                      <div className="bg-gray-100 p-2 rounded-lg">
+                        <Receipt className="w-5 h-5 text-gray-600" />
                       </div>
-                      <span className="text-sm font-medium text-[var(--muted)]">Other</span>
+                      <span className="text-sm font-medium text-(--muted)">Other</span>
                     </div>
-                    <p className="text-xl font-bold text-[var(--text)]">
+                    <p className="text-xl font-bold text-(--text)">
                       {formatCurrency(currentMonthExpenses.other)}
                     </p>
                   </Card>
@@ -1040,49 +1145,36 @@ export default function DashboardPage() {
               <Card className="p-6 mb-6">
                 <div className="flex items-center justify-between mb-4">
                   <div>
-                    <h3 className="text-sm font-semibold text-[var(--text)]">
+                    <h3 className="text-sm font-semibold text-(--text)">
                       Branch Sales Analytics
                     </h3>
-                    <p className="text-xs text-[var(--muted)]">Sales performance by branch location</p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Filter className="w-4 h-4 text-[var(--muted)]" />
-                    <select
-                      value={selectedBranch}
-                      onChange={(e) => setSelectedBranch(e.target.value)}
-                      className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
-                    >
-                      <option value="all">All Branches</option>
-                      {branches.map((branch) => (
-                        <option key={branch} value={branch}>{branch}</option>
-                      ))}
-                    </select>
+                    <p className="text-xs text-(--muted)">
+                      {selectedBranch === "all" 
+                        ? "Sales performance across all branch locations" 
+                        : `Sales performance for ${selectedBranch}`}
+                    </p>
                   </div>
                 </div>
 
                 {/* Branch Stats Cards */}
                 <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
                   {branches.map((branch) => {
-                    const branchTransactions = selectedBranch === "all" 
-                      ? transactions.filter((t) => (t.branch || "Main Branch") === branch && t.status === "completed")
-                      : selectedBranch === branch
-                        ? transactions.filter((t) => (t.branch || "Main Branch") === branch && t.status === "completed")
-                        : [];
+                    const branchTransactions = transactions.filter((t) => (t.branch || "Main Branch") === branch && t.status === "completed");
                     const branchRevenue = branchTransactions.reduce((sum, t) => sum + t.cost, 0);
                     const branchCount = branchTransactions.length;
-                    
+
                     if (selectedBranch !== "all" && selectedBranch !== branch) return null;
-                    
+
                     return (
                       <Card key={branch} className="p-4">
                         <div className="flex items-center gap-2 mb-2">
-                          <Building className="w-4 h-4 text-[var(--brand)]" />
-                          <span className="text-xs font-medium text-[var(--muted)] truncate">{branch}</span>
+                          <Building className="w-4 h-4 text-(--brand)" />
+                          <span className="text-xs font-medium text-(--muted) truncate">{branch}</span>
                         </div>
-                        <p className="text-2xl font-bold text-[var(--text)] mb-1">
+                        <p className="text-2xl font-bold text-(--text) mb-1">
                           {formatCurrency(branchRevenue)}
                         </p>
-                        <p className="text-xs text-[var(--muted)]">
+                        <p className="text-xs text-(--muted)">
                           {branchCount} transaction{branchCount !== 1 ? "s" : ""}
                         </p>
                       </Card>
@@ -1111,22 +1203,22 @@ export default function DashboardPage() {
                         const avgTransaction = branchCount > 0 ? branchRevenue / branchCount : 0;
                         const barberShare = branchRevenue * BARBER_SHARE;
                         const shopShare = branchRevenue * SHOP_SHARE;
-                        
+
                         if (selectedBranch !== "all" && selectedBranch !== branch) return null;
-                        
+
                         return (
                           <TableRow key={branch}>
                             <TableCell className="font-medium">
                               <div className="flex items-center gap-2">
-                                <Building className="w-4 h-4 text-[var(--brand)]" />
+                                <Building className="w-4 h-4 text-(--brand)" />
                                 {branch}
                               </div>
                             </TableCell>
                             <TableCell className="font-semibold">{formatCurrency(branchRevenue)}</TableCell>
                             <TableCell>{branchCount}</TableCell>
                             <TableCell>{formatCurrency(avgTransaction)}</TableCell>
-                            <TableCell className="text-emerald-600">{formatCurrency(barberShare)}</TableCell>
-                            <TableCell className="text-blue-600">{formatCurrency(shopShare)}</TableCell>
+                            <TableCell className="text-green-600">{formatCurrency(barberShare)}</TableCell>
+                            <TableCell className="text-gray-600">{formatCurrency(shopShare)}</TableCell>
                           </TableRow>
                         );
                       })}
@@ -1156,11 +1248,11 @@ export default function DashboardPage() {
                   <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto">
                     {isAdmin && (
                       <div className="flex items-center gap-2">
-                        <Filter className="w-4 h-4 text-[var(--muted)]" />
+                        <Filter className="w-4 h-4 text-(--muted)" />
                         <select
                           value={selectedBranch}
                           onChange={(e) => setSelectedBranch(e.target.value)}
-                          className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+                          className="rounded-lg border border-(--border) bg-white px-3 py-2 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)"
                         >
                           <option value="all">All Branches</option>
                           {branches.map((branch) => (
@@ -1174,14 +1266,14 @@ export default function DashboardPage() {
                         type="date"
                         value={startDate}
                         onChange={(e) => { setStartDate(e.target.value); setCurrentPage(1); }}
-                        className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+                        className="rounded-lg border border-(--border) bg-white px-3 py-2 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)"
                       />
-                      <span className="text-sm text-[var(--muted)]">to</span>
+                      <span className="text-sm text-(--muted)">to</span>
                       <input
                         type="date"
                         value={endDate}
                         onChange={(e) => { setEndDate(e.target.value); setCurrentPage(1); }}
-                        className="rounded-lg border border-[var(--border)] bg-white px-3 py-2 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+                        className="rounded-lg border border-(--border) bg-white px-3 py-2 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)"
                       />
                     </div>
                     <Button
@@ -1202,10 +1294,10 @@ export default function DashboardPage() {
 
                 {/* Chart Data Type Filter - Admin Only */}
                 {isAdmin && (
-                  <div className="flex items-center gap-4 pt-4 border-t border-[var(--border)]">
+                  <div className="flex items-center gap-4 pt-4 border-t border-(--border)">
                     <div className="flex items-center gap-2">
-                      <BarChart2 className="w-4 h-4 text-[var(--muted)]" />
-                      <span className="text-sm font-medium text-[var(--text)]">Chart Data:</span>
+                      <BarChart2 className="w-4 h-4 text-(--muted)" />
+                      <span className="text-sm font-medium text-(--text)">Chart Data:</span>
                       <div className="flex gap-2">
                         <Button
                           size="sm"
@@ -1237,8 +1329,8 @@ export default function DashboardPage() {
 
             {/* Transactions Table */}
             <Card>
-              <div className="flex items-center justify-between p-4 border-b border-[var(--border)]">
-                <h2 className="text-sm font-semibold text-[var(--text)] flex items-center gap-2">
+              <div className="flex items-center justify-between p-4 border-b border-(--border)">
+                <h2 className="text-sm font-semibold text-(--text) flex items-center gap-2">
                   <Clock className="w-5 h-5" />
                   Transaction Queue
                 </h2>
@@ -1314,8 +1406,8 @@ export default function DashboardPage() {
 
               {/* Pagination */}
               {totalPages > 1 && (
-                <div className="flex items-center justify-between p-4 border-t border-[var(--border)]">
-                  <p className="text-sm text-[var(--muted)]">
+                <div className="flex items-center justify-between p-4 border-t border-(--border)">
+                  <p className="text-sm text-(--muted)">
                     Showing {(currentPage - 1) * itemsPerPage + 1} to{" "}
                     {Math.min(currentPage * itemsPerPage, filteredTransactions.length)} of{" "}
                     {filteredTransactions.length} results
@@ -1353,11 +1445,11 @@ export default function DashboardPage() {
 
               {filteredTransactions.length === 0 && (
                 <div className="text-center py-12">
-                  <UserCircle className="w-16 h-16 text-[var(--muted)] mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold text-[var(--text)] mb-2">
+                  <UserCircle className="w-16 h-16 text-(--muted) mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold text-(--text) mb-2">
                     No Transactions Found
                   </h3>
-                  <p className="text-sm text-[var(--muted)] mb-4">
+                  <p className="text-sm text-(--muted) mb-4">
                     {searchTerm || startDate || endDate
                       ? "Try adjusting your filters"
                       : "Start by adding your first service"}
@@ -1371,11 +1463,11 @@ export default function DashboardPage() {
         {activeTab === "expenses" && (
           /* Barber Performance Table with 60/40 Split */
           <Card>
-            <div className="p-4 border-b border-[var(--border)]">
-              <h2 className="text-sm font-semibold text-[var(--text)]">
+            <div className="p-4 border-b border-(--border)">
+              <h2 className="text-sm font-semibold text-(--text)">
                 Barber Performance & Revenue Split
               </h2>
-              <p className="text-xs text-[var(--muted)] mt-1">
+              <p className="text-xs text-(--muted) mt-1">
                 Revenue is split 60% to barber, 40% to shop
               </p>
             </div>
@@ -1396,8 +1488,8 @@ export default function DashboardPage() {
                     <TableCell className="font-medium">{barber.name}</TableCell>
                     <TableCell>{barber.services}</TableCell>
                     <TableCell className="font-semibold">{formatCurrency(barber.totalRevenue)}</TableCell>
-                    <TableCell className="font-semibold text-emerald-600">{formatCurrency(barber.barberShare)}</TableCell>
-                    <TableCell className="font-semibold text-blue-600">{formatCurrency(barber.shopShare)}</TableCell>
+                    <TableCell className="font-semibold text-green-600">{formatCurrency(barber.barberShare)}</TableCell>
+                    <TableCell className="font-semibold text-gray-600">{formatCurrency(barber.shopShare)}</TableCell>
                     <TableCell>
                       {barber.services > 0 ? formatCurrency(barber.totalRevenue / barber.services) : "-"}
                     </TableCell>
@@ -1425,10 +1517,10 @@ export default function DashboardPage() {
                   key={step}
                   className={`w-2 h-2 rounded-full transition-colors ${
                     step === posStep
-                      ? "bg-[var(--brand)]"
+                      ? "bg-(--brand)"
                       : step < posStep
-                      ? "bg-emerald-500"
-                      : "bg-[var(--border)]"
+                      ? "bg-green-500"
+                      : "bg-(--border)"
                   }`}
                 />
               ))}
@@ -1466,7 +1558,7 @@ export default function DashboardPage() {
       >
         {posStep === 1 && (
           <div className="space-y-4">
-            <h3 className="text-base font-semibold text-[var(--text)] text-center">
+            <h3 className="text-base font-semibold text-(--text) text-center">
               Step 1: Choose a Barber
             </h3>
             <div className="grid grid-cols-2 gap-3">
@@ -1476,13 +1568,13 @@ export default function DashboardPage() {
                   onClick={() => setSelectedBarber(barber.id)}
                   className={`p-4 rounded-xl border-2 transition-all text-left ${
                     selectedBarber === barber.id
-                      ? "border-[var(--brand)] bg-[var(--primary-light)]"
-                      : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
+                      ? "border-(--brand) bg-(--primary-light)"
+                      : "border-(--border) bg-white hover:border-(--brand)"
                   }`}
                 >
                   <div className="text-3xl mb-2">{barber.avatar}</div>
-                  <div className="font-semibold text-[var(--text)]">{barber.name}</div>
-                  <div className="text-xs text-[var(--muted)]">{barber.specialty}</div>
+                  <div className="font-semibold text-(--text)">{barber.name}</div>
+                  <div className="text-xs text-(--muted)">{barber.specialty}</div>
                 </button>
               ))}
             </div>
@@ -1491,7 +1583,7 @@ export default function DashboardPage() {
 
         {posStep === 2 && (
           <div className="space-y-3">
-            <h3 className="text-base font-semibold text-[var(--text)] text-center">
+            <h3 className="text-base font-semibold text-(--text) text-center">
               Step 2: Choose a Service
             </h3>
             {mockData.services.map((service) => (
@@ -1500,15 +1592,15 @@ export default function DashboardPage() {
                 onClick={() => setSelectedService(service.id)}
                 className={`w-full p-4 rounded-xl border-2 transition-all flex items-center justify-between ${
                   selectedService === service.id
-                    ? "border-[var(--brand)] bg-[var(--primary-light)]"
-                    : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
+                    ? "border-(--brand) bg-(--primary-light)"
+                    : "border-(--border) bg-white hover:border-(--brand)"
                 }`}
               >
                 <div className="text-left">
-                  <div className="font-semibold text-[var(--text)]">{service.name}</div>
-                  <div className="text-xs text-[var(--muted)]">Duration: {service.duration}</div>
+                  <div className="font-semibold text-(--text)">{service.name}</div>
+                  <div className="text-xs text-(--muted)">Duration: {service.duration}</div>
                 </div>
-                <div className="font-bold text-[var(--text)]">
+                <div className="font-bold text-(--text)">
                   ₱{service.price.toLocaleString()}
                 </div>
               </button>
@@ -1518,17 +1610,17 @@ export default function DashboardPage() {
 
         {posStep === 3 && (
           <div className="space-y-4">
-            <h3 className="text-base font-semibold text-[var(--text)] text-center">
+            <h3 className="text-base font-semibold text-(--text) text-center">
               Step 3: Client Information
             </h3>
-            <div className="bg-[var(--muted-light)] p-4 rounded-xl space-y-2">
-              <p className="text-sm text-[var(--muted)]">
-                Barber: <span className="font-semibold text-[var(--text)]">
+            <div className="bg-(--muted-light) p-4 rounded-xl space-y-2">
+              <p className="text-sm text-(--muted)">
+                Barber: <span className="font-semibold text-(--text)">
                   {mockData.barbers.find((b) => b.id === selectedBarber)?.name}
                 </span>
               </p>
-              <p className="text-sm text-[var(--muted)]">
-                Service: <span className="font-semibold text-[var(--text)]">
+              <p className="text-sm text-(--muted)">
+                Service: <span className="font-semibold text-(--text)">
                   {mockData.services.find((s) => s.id === selectedService)?.name}
                 </span>
               </p>
@@ -1547,29 +1639,29 @@ export default function DashboardPage() {
 
         {posStep === 4 && (
           <div className="space-y-4">
-            <h3 className="text-base font-semibold text-[var(--text)] text-center">
+            <h3 className="text-base font-semibold text-(--text) text-center">
               Step 4: Confirm & Add to Queue
             </h3>
             <Card className="p-4 space-y-3">
               <div className="flex justify-between text-sm">
-                <span className="text-[var(--muted)]">Barber</span>
-                <span className="font-semibold text-[var(--text)]">
+                <span className="text-(--muted)">Barber</span>
+                <span className="font-semibold text-(--text)">
                   {mockData.barbers.find((b) => b.id === selectedBarber)?.name}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-[var(--muted)]">Service</span>
-                <span className="font-semibold text-[var(--text)]">
+                <span className="text-(--muted)">Service</span>
+                <span className="font-semibold text-(--text)">
                   {mockData.services.find((s) => s.id === selectedService)?.name}
                 </span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-[var(--muted)]">Client</span>
-                <span className="font-semibold text-[var(--text)]">{clientName}</span>
+                <span className="text-(--muted)">Client</span>
+                <span className="font-semibold text-(--text)">{clientName}</span>
               </div>
-              <div className="flex justify-between pt-3 border-t border-[var(--border)]">
-                <span className="font-medium text-[var(--text)]">Total Cost</span>
-                <span className="font-bold text-[var(--brand)]">
+              <div className="flex justify-between pt-3 border-t border-(--border)">
+                <span className="font-medium text-(--text)">Total Cost</span>
+                <span className="font-bold text-(--brand)">
                   ₱{mockData.services.find((s) => s.id === selectedService)?.price.toLocaleString()}
                 </span>
               </div>
@@ -1602,28 +1694,28 @@ export default function DashboardPage() {
           />
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="text-sm font-medium text-[var(--muted)] mb-1.5 block">
+              <label className="text-sm font-medium text-(--muted) mb-1.5 block">
                 <Zap className="w-4 h-4 inline mr-1" />
                 Electricity
               </label>
               <Input type="number" placeholder="0" />
             </div>
             <div>
-              <label className="text-sm font-medium text-[var(--muted)] mb-1.5 block">
+              <label className="text-sm font-medium text-(--muted) mb-1.5 block">
                 <Droplet className="w-4 h-4 inline mr-1" />
                 Water
               </label>
               <Input type="number" placeholder="0" />
             </div>
             <div>
-              <label className="text-sm font-medium text-[var(--muted)] mb-1.5 block">
+              <label className="text-sm font-medium text-(--muted) mb-1.5 block">
                 <Building className="w-4 h-4 inline mr-1" />
                 Rent
               </label>
               <Input type="number" placeholder="0" />
             </div>
             <div>
-              <label className="text-sm font-medium text-[var(--muted)] mb-1.5 block">
+              <label className="text-sm font-medium text-(--muted) mb-1.5 block">
                 <Receipt className="w-4 h-4 inline mr-1" />
                 Other
               </label>
@@ -1692,14 +1784,14 @@ export default function DashboardPage() {
             icon={<User className="w-4 h-4" />}
           />
           <div>
-            <label className="text-sm font-medium text-[var(--muted)] mb-1.5 block">
+            <label className="text-sm font-medium text-(--muted) mb-1.5 block">
               <Building className="w-4 h-4 inline mr-1" />
               Branch Location
             </label>
             <select
               value={newCashier.branch}
               onChange={(e) => setNewCashier({ ...newCashier, branch: e.target.value })}
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-4 py-2.5 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+              className="w-full rounded-lg border border-(--border) bg-white px-4 py-2.5 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)"
             >
               {branches.map((branch) => (
                 <option key={branch} value={branch}>{branch}</option>
@@ -1709,14 +1801,14 @@ export default function DashboardPage() {
 
           {/* Existing Cashiers List */}
           {cashiers.length > 0 && (
-            <div className="mt-6 pt-4 border-t border-[var(--border)]">
-              <h4 className="text-sm font-semibold text-[var(--text)] mb-3">Existing Cashiers</h4>
+            <div className="mt-6 pt-4 border-t border-(--border)">
+              <h4 className="text-sm font-semibold text-(--text) mb-3">Existing Cashiers</h4>
               <div className="space-y-2 max-h-40 overflow-y-auto">
                 {cashiers.map((cashier) => (
-                  <div key={cashier.id} className="flex items-center justify-between p-2 rounded-lg bg-[var(--muted-light)]">
+                  <div key={cashier.id} className="flex items-center justify-between p-2 rounded-lg bg-(--muted-light)">
                     <div>
-                      <p className="text-sm font-medium text-[var(--text)]">{cashier.username}</p>
-                      <p className="text-xs text-[var(--muted)] flex items-center gap-1">
+                      <p className="text-sm font-medium text-(--text)">{cashier.username}</p>
+                      <p className="text-xs text-(--muted) flex items-center gap-1">
                         <Building className="w-3 h-3" />
                         {cashier.branch}
                       </p>
@@ -1725,7 +1817,7 @@ export default function DashboardPage() {
                       variant="ghost"
                       size="sm"
                       onClick={() => deleteCashier(cashier.username)}
-                      className="text-red-500 hover:text-red-600"
+                      className="text-yellow-600 hover:text-yellow-700"
                     >
                       <Trash2 className="w-4 h-4" />
                     </Button>

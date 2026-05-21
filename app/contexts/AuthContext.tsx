@@ -41,7 +41,7 @@ const VALID_CREDENTIALS = {
   cashier: { username: "cashier", password: "cashier", role: "cashier" as Role, branch: "Main Branch" },
 };
 
-const DEFAULT_BRANCHES = ["Main Branch", "Downtown Branch", "Mall Branch", "Airport Branch"];
+const DEFAULT_BRANCHES = ["Main Branch", "Downtown Branch", "Westside Branch"];
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User>({
@@ -148,10 +148,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen bg-[var(--page-bg)]">
+      <div className="flex items-center justify-center min-h-screen bg-(--page-bg)">
         <div className="text-center">
-          <div className="w-8 h-8 border-2 border-[var(--brand)] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-          <p className="text-[var(--muted)]">Loading...</p>
+          <div className="w-8 h-8 border-2 border-(--brand) border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-(--muted)">Loading...</p>
         </div>
       </div>
     );

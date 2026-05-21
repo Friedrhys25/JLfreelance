@@ -35,7 +35,7 @@ export default function LoginPage() {
     <div className="min-h-screen lg:grid lg:grid-cols-2">
       {/* Left Side - Decorative */}
       <div className="relative hidden items-center justify-center overflow-hidden lg:flex">
-        <div className="absolute inset-0 bg-gradient-to-br from-blue-600 via-blue-500 to-sky-500" />
+        <div className="absolute inset-0 bg-linear-to-br from-gray-700 via-gray-600 to-gray-500" />
         <div className="absolute inset-0 opacity-20" />
         <div className="relative z-10 mx-10 max-w-md space-y-6 text-white">
           <div className="flex h-20 w-20 items-center justify-center rounded-3xl bg-white/10 backdrop-blur-sm">
@@ -67,28 +67,28 @@ export default function LoginPage() {
       {/* Right Side - Login Form */}
       <div className="flex items-center justify-center px-6 py-12">
         <div className="w-full max-w-md space-y-8">
-          <Link href="/" className="inline-flex items-center gap-2 text-sm text-[var(--muted)]">
+          <Link href="/" className="inline-flex items-center gap-2 text-sm text-(--muted)">
             <ArrowLeft className="h-4 w-4" />
             Back to home
           </Link>
 
           <Card className="p-8">
             <div className="mb-6 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-100 text-blue-600">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 text-gray-600">
                 <Lock className="h-6 w-6" />
               </div>
-              <h2 className="mt-4 text-2xl font-semibold text-[var(--text)]">
+              <h2 className="mt-4 text-2xl font-semibold text-(--text)">
                 Sign in
               </h2>
-              <p className="text-sm text-[var(--muted)]">
+              <p className="text-sm text-(--muted)">
                 Use your credentials to access the dashboard.
               </p>
             </div>
 
             {error && (
-              <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 flex items-center gap-2">
-                <AlertCircle className="w-4 h-4 text-red-600" />
-                <p className="text-sm text-red-600">{error}</p>
+              <div className="mb-4 p-3 rounded-lg bg-yellow-50 border border-yellow-200 flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-yellow-600" />
+                <p className="text-sm text-yellow-600">{error}</p>
               </div>
             )}
 
@@ -118,7 +118,7 @@ export default function LoginPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-[34px] text-[var(--muted)] transition hover:text-[var(--text)]"
+                  className="absolute right-4 top-8.5 text-(--muted) transition hover:text-(--text)"
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -140,9 +140,9 @@ export default function LoginPage() {
             </form>
 
             {/* Demo Credentials */}
-            <div className="mt-6 p-4 rounded-lg bg-blue-50 border border-blue-100">
-              <p className="text-xs font-semibold text-blue-800 mb-2">Demo Credentials:</p>
-              <div className="space-y-1 text-xs text-blue-700">
+            <div className="mt-6 p-4 rounded-lg bg-gray-50 border border-gray-100">
+              <p className="text-xs font-semibold text-gray-800 mb-2">Demo Credentials:</p>
+              <div className="space-y-1 text-xs text-gray-700">
                 <div className="flex justify-between">
                   <span>Admin:</span>
                   <code className="bg-white px-2 py-0.5 rounded">admin / admin</code>

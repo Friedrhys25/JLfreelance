@@ -19,19 +19,19 @@ export function Button({
   ...props
 }: ButtonProps) {
   const baseStyles =
-    "inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--brand)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
+    "inline-flex items-center justify-center gap-2 font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-(--brand) focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50";
 
   const variantStyles = {
     primary:
-      "bg-[var(--brand)] text-white hover:bg-[var(--brand-strong)] shadow-sm",
+      "bg-(--brand) text-white hover:bg-(--brand-strong) shadow-sm",
     secondary:
-      "bg-[var(--secondary)] text-white hover:bg-[var(--secondary-hover)]",
-    success: "bg-[var(--success)] text-white hover:bg-emerald-700",
-    error: "bg-[var(--error)] text-white hover:bg-red-700",
+      "bg-(--secondary) text-white hover:bg-(--secondary-hover)",
+    success: "bg-(--success) text-white hover:bg-(--success)",
+    error: "bg-(--error) text-white hover:bg-(--error-light)",
     outline:
-      "border border-[var(--border)] bg-white text-[var(--text)] hover:bg-[var(--muted-light)]",
+      "border border-(--border) bg-white text-(--text) hover:bg-(--surface-alt)",
     ghost:
-      "text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--muted-light)]",
+      "text-(--muted) hover:text-(--text) hover:bg-(--surface-alt)",
   };
 
   const sizeStyles = {

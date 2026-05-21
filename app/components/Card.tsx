@@ -17,12 +17,12 @@ export function Card({
   hover = false,
 }: CardProps) {
   const baseStyles =
-    "bg-white border border-[var(--border)] rounded-xl shadow-sm transition-all duration-200";
+    "bg-white border border-(--border) rounded-xl shadow-sm transition-all duration-200";
 
   const variantStyles = {
     default: "",
-    subtle: "bg-[var(--muted-light)]",
-    gradient: "bg-gradient-to-br from-[var(--primary-light)] to-white",
+    subtle: "bg-(--muted-light)",
+    gradient: "bg-gradient-to-br from-(--primary-light) to-white",
   };
 
   const hoverStyles = hover

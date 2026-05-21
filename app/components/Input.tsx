@@ -18,7 +18,7 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
         {label && (
           <label
             htmlFor={inputId}
-            className="text-sm font-medium text-[var(--muted)]"
+            className="text-sm font-medium text-(--muted)"
           >
             {label}
           </label>
@@ -28,25 +28,25 @@ export const Input = React.forwardRef<HTMLInputElement, InputProps>(
             ref={ref}
             id={inputId}
             className={cn(
-              "w-full rounded-lg border border-[var(--border)] bg-white px-4 py-2.5 text-sm text-[var(--text)] transition-all duration-200",
-              "placeholder:text-[var(--muted)]",
-              "focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]",
+              "w-full rounded-lg border border-(--border) bg-white px-4 py-2.5 text-sm text-(--text) transition-all duration-200",
+              "placeholder:text-(--muted)",
+              "focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)",
               icon ? "pl-10" : "",
               error
-                ? "border-[var(--error)] focus:border-[var(--error)] focus:ring-[var(--error-light)]"
+                ? "border-(--error) focus:border-(--error) focus:ring-(--error-light)"
                 : "",
               className
             )}
             {...props}
           />
           {icon && (
-            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--muted)]">
+            <div className="absolute left-3 top-1/2 -translate-y-1/2 text-(--muted)">
               {icon}
             </div>
           )}
         </div>
         {error && (
-          <span className="text-xs font-medium text-[var(--error)]">
+          <span className="text-xs font-medium text-(--error)">
             {error}
           </span>
         )}

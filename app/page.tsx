@@ -42,8 +42,8 @@ export default function LandingPage() {
       </nav>
 
       <main className="relative">
-        <div className="pointer-events-none absolute -top-16 right-6 h-72 w-72 rounded-full bg-blue-200/40 blur-3xl" />
-        <div className="pointer-events-none absolute left-6 top-40 h-60 w-60 rounded-full bg-sky-200/40 blur-3xl" />
+        <div className="pointer-events-none absolute -top-16 right-6 h-72 w-72 rounded-full bg-gray-200/40 blur-3xl" />
+        <div className="pointer-events-none absolute left-6 top-40 h-60 w-60 rounded-full bg-green-200/40 blur-3xl" />
 
         <section className="container mx-auto grid gap-12 px-6 py-16 lg:grid-cols-2 lg:items-center">
           <div className="space-y-6">
@@ -124,7 +124,7 @@ export default function LandingPage() {
 
           <div className="grid gap-6 md:grid-cols-3">
             <Card hover className="animate-fade-up">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-(--brand)">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-600">
                 <Shield className="h-6 w-6" />
               </div>
               <h3 className="mt-4 text-xl font-semibold text-(--text)">
@@ -136,7 +136,7 @@ export default function LandingPage() {
             </Card>
 
             <Card hover className="animate-fade-up stagger-1">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-(--brand)">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-600">
                 <Zap className="h-6 w-6" />
               </div>
               <h3 className="mt-4 text-xl font-semibold text-(--text)">
@@ -148,7 +148,7 @@ export default function LandingPage() {
             </Card>
 
             <Card hover className="animate-fade-up stagger-2">
-              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-slate-100 text-(--brand)">
+              <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gray-100 text-gray-600">
                 <Target className="h-6 w-6" />
               </div>
               <h3 className="mt-4 text-xl font-semibold text-(--text)">
@@ -164,11 +164,11 @@ export default function LandingPage() {
         <section className="container mx-auto px-6 pb-20 pt-6">
           <Card variant="gradient" className="py-12 text-center">
             <div className="mx-auto max-w-2xl space-y-6">
-              <Sparkles className="mx-auto h-10 w-10 text-[var(--brand)]" />
-              <h2 className="text-4xl font-semibold text-[var(--text)]">
+              <Sparkles className="mx-auto h-10 w-10 text-(--brand)" />
+              <h2 className="text-4xl font-semibold text-(--text)">
                 Ready to get started?
               </h2>
-              <p className="text-[var(--muted)]">
+              <p className="text-(--muted)">
                 Join the modern barbershop management system built for
                 efficiency and growth.
               </p>

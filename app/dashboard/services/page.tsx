@@ -187,7 +187,7 @@ export default function ServicesDashboard() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
             <Card className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-(--brand)">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-50 text-gray-600">
                   <Scissors className="h-6 w-6" />
                 </div>
                 <div>
@@ -203,7 +203,7 @@ export default function ServicesDashboard() {
 
             <Card className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-600">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-green-50 text-green-600">
                   <DollarSign className="h-6 w-6" />
                 </div>
                 <div>
@@ -223,7 +223,7 @@ export default function ServicesDashboard() {
 
             <Card className="flex items-center justify-between">
               <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-50 text-gray-600">
                   <Percent className="h-6 w-6" />
                 </div>
                 <div>
@@ -339,7 +339,7 @@ export default function ServicesDashboard() {
         {/* Empty State */}
         {filteredServices.length === 0 && (
           <Card className="mt-4 py-12 text-center">
-            <Scissors className="mx-auto mb-4 h-16 w-16 text-slate-300" />
+            <Scissors className="mx-auto mb-4 h-16 w-16 text-gray-300" />
             <h3 className="text-xl font-semibold text-(--text) mb-2">
               No Services Found
             </h3>
@@ -388,4 +388,5 @@ export default function ServicesDashboard() {
     </div>
   );
 }
+
 

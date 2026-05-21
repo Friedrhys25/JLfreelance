@@ -50,13 +50,13 @@ export default function RegisterPage() {
 
           <Card className="p-8">
             <div className="mb-6 text-center">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#ff6b9d] text-[#0d0d0d] border-3 border-[#0d0d0d] shadow-[4px_4px_0px_0px_#0d0d0d]">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-100 text-gray-600 border-2 border-gray-800 shadow-[4px_4px_0px_0px_#171717]">
                 <UserPlus className="h-6 w-6" />
               </div>
-              <h2 className="mt-4 text-2xl font-black uppercase text-[#0d0d0d]">
+              <h2 className="mt-4 text-2xl font-bold uppercase text-(--text)">
                 Create Account
               </h2>
-              <p className="text-sm font-bold text-[#0d0d0d]">
+              <p className="text-sm font-medium text-(--text)">
                 Join the Barbershop POS system
               </p>
             </div>
@@ -101,7 +101,7 @@ export default function RegisterPage() {
                 <button
                   type="button"
                   onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-[34px] text-[#0d0d0d] transition hover:text-[#ff6b9d]"
+                  className="absolute right-4 top-8.5 text-(--muted) transition hover:text-(--text)"
                 >
                   {showPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -131,7 +131,7 @@ export default function RegisterPage() {
                   onClick={() =>
                     setShowConfirmPassword(!showConfirmPassword)
                   }
-                  className="absolute right-4 top-[34px] text-[#0d0d0d] transition hover:text-[#ff6b9d]"
+                  className="absolute right-4 top-8.5 text-(--muted) transition hover:text-(--text)"
                 >
                   {showConfirmPassword ? (
                     <EyeOff className="h-5 w-5" />
@@ -142,54 +142,54 @@ export default function RegisterPage() {
               </div>
 
               <div>
-                <label className="font-bold uppercase tracking-wide text-[#0d0d0d] mb-3 block">
+                <label className="font-bold uppercase tracking-wide text-(--text) mb-3 block">
                   Select role
                 </label>
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
                     onClick={() => setSelectedRole("admin")}
-                    className={`p-4 border-3 border-[#0d0d0d] transition-all ${
+                    className={`p-4 border-2 border-gray-800 transition-all ${
                       selectedRole === "admin"
-                        ? "bg-[#ffeb3b] shadow-[6px_6px_0px_0px_#0d0d0d]"
-                        : "bg-[#ffffff] shadow-[4px_4px_0px_0px_#0d0d0d] hover:shadow-[6px_6px_0px_0px_#0d0d0d]"
+                        ? "bg-gray-200 shadow-[6px_6px_0px_0px_#171717]"
+                        : "bg-white shadow-[4px_4px_0px_0px_#171717] hover:shadow-[6px_6px_0px_0px_#171717]"
                     }`}
                   >
-                    <Shield className="w-6 h-6 text-[#0d0d0d] mx-auto mb-2" />
-                    <div className="font-black uppercase text-[#0d0d0d] text-sm">
+                    <Shield className="w-6 h-6 text-(--text) mx-auto mb-2" />
+                    <div className="font-bold uppercase text-(--text) text-sm">
                       Admin
                     </div>
                   </button>
                   <button
                     type="button"
                     onClick={() => setSelectedRole("cashier")}
-                    className={`p-4 border-3 border-[#0d0d0d] transition-all ${
+                    className={`p-4 border-2 border-gray-800 transition-all ${
                       selectedRole === "cashier"
-                        ? "bg-[#4fc3f7] shadow-[6px_6px_0px_0px_#0d0d0d]"
-                        : "bg-[#ffffff] shadow-[4px_4px_0px_0px_#0d0d0d] hover:shadow-[6px_6px_0px_0px_#0d0d0d]"
+                        ? "bg-green-200 shadow-[6px_6px_0px_0px_#171717]"
+                        : "bg-white shadow-[4px_4px_0px_0px_#171717] hover:shadow-[6px_6px_0px_0px_#171717]"
                     }`}
                   >
-                    <UserCircle className="w-6 h-6 text-[#0d0d0d] mx-auto mb-2" />
-                    <div className="font-black uppercase text-[#0d0d0d] text-sm">
+                    <UserCircle className="w-6 h-6 text-(--text) mx-auto mb-2" />
+                    <div className="font-bold uppercase text-(--text) text-sm">
                       Cashier
                     </div>
                   </button>
                 </div>
               </div>
 
-              <label className="flex items-start gap-2 text-sm font-bold text-[#0d0d0d]">
+              <label className="flex items-start gap-2 text-sm font-medium text-(--text)">
                 <input
                   type="checkbox"
-                  className="mt-1 h-4 w-4 border-3 border-[#0d0d0d] accent-[#ff6b9d]"
+                  className="mt-1 h-4 w-4 border-2 border-gray-800 accent-gray-600"
                   required
                 />
                 <span>
                   I agree to the{" "}
-                  <Link className="text-[#ff6b9d] hover:underline" href="#">
+                  <Link className="text-gray-600 hover:underline" href="#">
                     Terms of Service
                   </Link>{" "}
                   and{" "}
-                  <Link className="text-[#ff6b9d] hover:underline" href="#">
+                  <Link className="text-gray-600 hover:underline" href="#">
                     Privacy Policy
                   </Link>
                 </span>
@@ -199,8 +199,8 @@ export default function RegisterPage() {
                 Create Account
               </Button>
             </form>
-            <div className="mt-6 border-t-3 border-[#0d0d0d] pt-6 text-center">
-              <p className="font-bold text-[#0d0d0d]">
+            <div className="mt-6 border-t-2 border-gray-800 pt-6 text-center">
+              <p className="font-medium text-(--text)">
                 Already have an account?
               </p>
               <div className="mt-3">
@@ -216,34 +216,34 @@ export default function RegisterPage() {
       </div>
 
       <div className="relative hidden items-center justify-center overflow-hidden lg:flex">
-        <div className="absolute inset-0 gradient-neo-accent" />
-        <div className="relative z-10 mx-10 max-w-md space-y-6 text-[#0d0d0d]">
-          <div className="flex h-20 w-20 items-center justify-center bg-[#ffffff] border-4 border-[#0d0d0d] shadow-[8px_8px_0px_0px_#0d0d0d]">
-            <Scissors className="h-10 w-10 text-[#0d0d0d]" />
+        <div className="absolute inset-0 bg-linear-to-br from-gray-700 via-gray-600 to-gray-500" />
+        <div className="relative z-10 mx-10 max-w-md space-y-6 text-white">
+          <div className="flex h-20 w-20 items-center justify-center bg-white border-2 border-gray-800 shadow-[8px_8px_0px_0px_#171717]">
+            <Scissors className="h-10 w-10 text-gray-800" />
           </div>
-          <h2 className="text-4xl font-black uppercase tracking-tighter">
+          <h2 className="text-4xl font-bold uppercase tracking-tight">
             Join Today
           </h2>
-          <p className="text-lg font-bold text-[#0d0d0d]">
+          <p className="text-lg font-medium text-white">
             Create your account and start managing your barbershop with
             efficiency and style.
           </p>
           <div className="space-y-3">
-            <div className="flex items-center gap-2 bg-[#ffffff] border-3 border-[#0d0d0d] shadow-[4px_4px_0px_0px_#0d0d0d] px-4 py-3">
-              <Shield className="h-5 w-5 text-[#0d0d0d]" />
-              <span className="font-bold text-[#0d0d0d]">
+            <div className="flex items-center gap-2 bg-white border-2 border-gray-800 shadow-[4px_4px_0px_0px_#171717] px-4 py-3">
+              <Shield className="h-5 w-5 text-gray-800" />
+              <span className="font-medium text-gray-800">
                 Role-based permissions
               </span>
             </div>
-            <div className="flex items-center gap-2 bg-[#ffffff] border-3 border-[#0d0d0d] shadow-[4px_4px_0px_0px_#0d0d0d] px-4 py-3">
-              <UserCircle className="h-5 w-5 text-[#0d0d0d]" />
-              <span className="font-bold text-[#0d0d0d]">
+            <div className="flex items-center gap-2 bg-white border-2 border-gray-800 shadow-[4px_4px_0px_0px_#171717] px-4 py-3">
+              <UserCircle className="h-5 w-5 text-gray-800" />
+              <span className="font-medium text-gray-800">
                 Team management
               </span>
             </div>
-            <div className="flex items-center gap-2 bg-[#ffffff] border-3 border-[#0d0d0d] shadow-[4px_4px_0px_0px_#0d0d0d] px-4 py-3">
-              <Lock className="h-5 w-5 text-[#0d0d0d]" />
-              <span className="font-bold text-[#0d0d0d]">
+            <div className="flex items-center gap-2 bg-white border-2 border-gray-800 shadow-[4px_4px_0px_0px_#171717] px-4 py-3">
+              <Lock className="h-5 w-5 text-gray-800" />
+              <span className="font-medium text-gray-800">
                 Secure authentication
               </span>
             </div>

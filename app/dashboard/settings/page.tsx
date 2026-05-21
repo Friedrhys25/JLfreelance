@@ -143,7 +143,7 @@ export default function SettingsPage() {
         {/* Page Header */}
         <div className="mb-8">
           <div className="flex items-center gap-4 mb-4">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50 text-sky-600">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gray-50 text-gray-600">
               <Settings className="h-6 w-6" />
             </div>
             <div>
@@ -161,7 +161,7 @@ export default function SettingsPage() {
           {/* Tax Settings */}
           <Card className="p-8">
             <div className="flex items-center gap-3 mb-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-yellow-50 text-yellow-600">
                 <Percent className="h-6 w-6" />
               </div>
               <h2 className="text-xl font-semibold text-(--text)">
@@ -230,7 +230,7 @@ export default function SettingsPage() {
           {/* Discount Codes */}
           <Card className="p-8">
             <div className="flex items-center gap-3 mb-6">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-rose-50 text-rose-500">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-yellow-50 text-yellow-600">
                 <Tag className="h-6 w-6" />
               </div>
               <h2 className="text-xl font-semibold text-(--text)">
@@ -307,8 +307,8 @@ export default function SettingsPage() {
                     <div
                       className={`h-2.5 w-2.5 rounded-full ${
                         discount.status === "active"
-                          ? "bg-emerald-500"
-                          : "bg-slate-300"
+                          ? "bg-green-500"
+                          : "bg-gray-300"
                       }`}
                     />
                     <div>
@@ -396,4 +396,5 @@ export default function SettingsPage() {
     </div>
   );
 }
+
 
