@@ -29,7 +29,6 @@ export function NewServicePageContent() {
     <div className="min-h-screen">
       <DashboardTopBar
         activeTab={null}
-        activeShortcut="new-service"
         branch={user.branch}
         canManageUsers={isAdmin}
         canViewExpenses={isAdmin || isClient}

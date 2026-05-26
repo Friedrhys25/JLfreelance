@@ -2,16 +2,17 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building, CheckCircle, ChevronRight, Droplet, Receipt, Scissors, User, Users, Zap } from "lucide-react";
+import { Building, CheckCircle, ChevronRight, Scissors, User, Users } from "lucide-react";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
 import { Input } from "@/app/components/Input";
 import { Modal } from "@/app/components/Modal";
 import { useAuth } from "@/app/contexts/AuthContext";
-import { BARBER_SPECIALTIES, INITIAL_BARBERS, INITIAL_TRANSACTIONS, SERVICES } from "@/app/dashboard/dashboard-data";
+import { BARBER_SPECIALTIES, INITIAL_BARBERS, INITIAL_TRANSACTIONS } from "@/app/dashboard/dashboard-data";
 import { DashboardOverview } from "@/app/dashboard/_components/DashboardOverview";
 import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import type { Barber, Transaction } from "@/app/dashboard/types";
+import { loadServiceSettings, type ServiceSetting } from "@/app/dashboard/settings/service-settings-store";
 
 const ITEMS_PER_PAGE = 10;
 
@@ -20,7 +21,6 @@ export default function DashboardPage() {
   const { addUser, branches, deleteUser, isAdmin, isAuthenticated, isCashier, isClient, logout, user, users } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [posModalOpen, setPosModalOpen] = useState(false);
-  const [expensesModalOpen, setExpensesModalOpen] = useState(false);
   const [addBarberModalOpen, setAddBarberModalOpen] = useState(false);
   const [addUserModalOpen, setAddUserModalOpen] = useState(false);
   const [posStep, setPosStep] = useState(1);
@@ -28,6 +28,7 @@ export default function DashboardPage() {
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [clientName, setClientName] = useState("");
   const [barbers, setBarbers] = useState<Barber[]>(INITIAL_BARBERS);
+  const [services] = useState<ServiceSetting[]>(() => loadServiceSettings());
   const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
   const [searchTerm, setSearchTerm] = useState("");
   const [startDate, setStartDate] = useState("");
@@ -53,6 +54,7 @@ export default function DashboardPage() {
       router.push("/login");
     }
   }, [isAuthenticated, router]);
+
 
   const effectiveSelectedBranch = isClient && user.branch ? user.branch : selectedBranch;
   const canViewExpenses = isAdmin || isClient;
@@ -133,7 +135,7 @@ export default function DashboardPage() {
     transactionSequence.current += 1;
     const now = new Date();
     const barber = barbers.find((item) => item.id === selectedBarber);
-    const service = SERVICES.find((item) => item.id === selectedService);
+    const service = services.find((item) => item.id === selectedService);
 
     if (!barber || !service) {
       return;
@@ -217,12 +219,6 @@ export default function DashboardPage() {
             <h1 className="mt-2 text-3xl font-semibold text-[var(--text)] md:text-4xl">Operations center</h1>
             <p className="mt-2 max-w-2xl text-sm text-[var(--muted)]">{pageDescription}</p>
           </div>
-          {canViewExpenses && (
-            <Button variant="outline" size="md" onClick={() => setExpensesModalOpen(true)}>
-              <Receipt className="h-4 w-4" />
-              Log Monthly Expenses
-            </Button>
-          )}
         </div>
 
         <DashboardOverview
@@ -344,7 +340,7 @@ export default function DashboardPage() {
         {posStep === 2 && (
           <div className="space-y-3">
             <h3 className="text-center text-base font-semibold text-[var(--text)]">Step 2: Choose a service</h3>
-            {SERVICES.map((service) => (
+            {services.map((service) => (
               <button
                 key={service.id}
                 type="button"
@@ -373,7 +369,7 @@ export default function DashboardPage() {
                 Barber: <span className="font-semibold text-[var(--text)]">{barbers.find((item) => item.id === selectedBarber)?.name}</span>
               </p>
               <p className="text-sm text-[var(--muted)]">
-                Service: <span className="font-semibold text-[var(--text)]">{SERVICES.find((item) => item.id === selectedService)?.name}</span>
+                Service: <span className="font-semibold text-[var(--text)]">{services.find((item) => item.id === selectedService)?.name}</span>
               </p>
             </div>
             <Input
@@ -398,7 +394,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--muted)]">Service</span>
-                <span className="font-semibold text-[var(--text)]">{SERVICES.find((item) => item.id === selectedService)?.name}</span>
+                <span className="font-semibold text-[var(--text)]">{services.find((item) => item.id === selectedService)?.name}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--muted)]">Client</span>
@@ -407,62 +403,12 @@ export default function DashboardPage() {
               <div className="flex justify-between border-t border-[var(--border)] pt-3">
                 <span className="font-medium text-[var(--text)]">Total Cost</span>
                 <span className="font-bold text-[var(--brand)]">
-                  {formatCurrency(SERVICES.find((item) => item.id === selectedService)?.price ?? 0)}
+                  {formatCurrency(services.find((item) => item.id === selectedService)?.price ?? 0)}
                 </span>
               </div>
             </Card>
           </div>
         )}
-      </Modal>
-
-      <Modal
-        isOpen={expensesModalOpen}
-        onClose={() => setExpensesModalOpen(false)}
-        title="Monthly Expenses"
-        footer={
-          <div className="flex w-full gap-2">
-            <Button variant="outline" onClick={() => setExpensesModalOpen(false)} className="flex-1">
-              Close
-            </Button>
-            <Button variant="primary" onClick={() => setExpensesModalOpen(false)} className="flex-1">
-              Saved
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <Input type="month" label="Month" defaultValue={todayKey.slice(0, 7)} />
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-                <Zap className="mr-1 inline h-4 w-4" />
-                Electricity
-              </label>
-              <Input type="number" placeholder="0" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-                <Droplet className="mr-1 inline h-4 w-4" />
-                Water
-              </label>
-              <Input type="number" placeholder="0" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-                <Building className="mr-1 inline h-4 w-4" />
-                Rent
-              </label>
-              <Input type="number" placeholder="0" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-                <Receipt className="mr-1 inline h-4 w-4" />
-                Other
-              </label>
-              <Input type="number" placeholder="0" />
-            </div>
-          </div>
-        </div>
       </Modal>
 
       <Modal

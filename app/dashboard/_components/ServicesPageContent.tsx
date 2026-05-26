@@ -34,7 +34,6 @@ export function ServicesPageContent() {
     <div className="min-h-screen">
       <DashboardTopBar
         activeTab={null}
-        activeShortcut="services"
         branch={user.branch}
         canManageUsers={isAdmin}
         canViewExpenses={isAdmin || isClient}

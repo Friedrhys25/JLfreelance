@@ -1,14 +1,13 @@
 "use client";
 
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Building, LogOut, Menu, Plus, Receipt, Scissors, Settings, TrendingUp, Users, X } from "lucide-react";
+import { Building, LogOut, Menu, Receipt, Scissors, Settings, TrendingUp, Users, X } from "lucide-react";
 import { Button } from "@/app/components/Button";
 import type { DashboardTab } from "@/app/dashboard/types";
 
 interface DashboardTopBarProps {
   activeTab?: DashboardTab | null;
-  activeShortcut?: "services" | "new-service" | "settings";
+  activeShortcut?: "settings";
   canViewExpenses: boolean;
   canManageUsers: boolean;
   mobileMenuOpen: boolean;
@@ -84,27 +83,17 @@ export function DashboardTopBar({
                 Expenses
               </Button>
             )}
-            <Link href="/dashboard/services">
-              <Button variant={activeShortcut === "services" ? "primary" : "outline"} size="sm">
-                <Scissors className="h-4 w-4" />
-                Services
-              </Button>
-            </Link>
-            <Link href="/dashboard/services/new">
-              <Button variant={activeShortcut === "new-service" ? "primary" : "outline"} size="sm">
-                <Plus className="h-4 w-4" />
-                New Service
-              </Button>
-            </Link>
-            <Link href="/dashboard/settings">
-              <Button variant={activeShortcut === "settings" ? "primary" : "outline"} size="sm">
-                <Settings className="h-4 w-4" />
-                Settings
-              </Button>
-            </Link>
+            <Button
+              variant={activeShortcut === "settings" ? "primary" : "outline"}
+              size="sm"
+              onClick={() => router.push("/dashboard/settings")}
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
             {canViewExpenses && (
               <Button variant="outline" size="sm" onClick={onOpenBarberModal}>
-                <Plus className="h-4 w-4" />
+                <Users className="h-4 w-4" />
                 Add Barber
               </Button>
             )}
@@ -151,24 +140,18 @@ export function DashboardTopBar({
                 Expenses
               </Button>
             )}
-            <Link href="/dashboard/services" onClick={closeMobileMenu}>
-              <Button variant={activeShortcut === "services" ? "primary" : "outline"} size="sm" fullWidth>
-                <Scissors className="h-4 w-4" />
-                Services
-              </Button>
-            </Link>
-            <Link href="/dashboard/services/new" onClick={closeMobileMenu}>
-              <Button variant={activeShortcut === "new-service" ? "primary" : "outline"} size="sm" fullWidth>
-                <Plus className="h-4 w-4" />
-                New Service
-              </Button>
-            </Link>
-            <Link href="/dashboard/settings" onClick={closeMobileMenu}>
-              <Button variant={activeShortcut === "settings" ? "primary" : "outline"} size="sm" fullWidth>
-                <Settings className="h-4 w-4" />
-                Settings
-              </Button>
-            </Link>
+            <Button
+              variant={activeShortcut === "settings" ? "primary" : "outline"}
+              size="sm"
+              fullWidth
+              onClick={() => {
+                router.push("/dashboard/settings");
+                closeMobileMenu();
+              }}
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
             {canViewExpenses && (
               <Button
                 variant="outline"
@@ -179,7 +162,7 @@ export function DashboardTopBar({
                   closeMobileMenu();
                 }}
               >
-                <Plus className="h-4 w-4" />
+                <Users className="h-4 w-4" />
                 Add Barber
               </Button>
             )}

@@ -53,6 +53,9 @@ export function DashboardExpenses({
   totalExpenses,
   totalRevenue,
 }: DashboardExpensesProps) {
+  const totalBarberShare = barberPerformance.reduce((sum, row) => sum + row.barberShare, 0);
+  const totalShopShare = barberPerformance.reduce((sum, row) => sum + row.shopShare, 0);
+
   return (
     <div className="space-y-6">
       <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
@@ -158,6 +161,20 @@ export function DashboardExpenses({
           <h2 className="text-lg font-semibold text-[var(--text)]">Barber Revenue Split</h2>
           <p className="text-sm text-[var(--muted)]">60% barber share and 40% shop share based on filtered revenue.</p>
         </div>
+
+        <div className="grid gap-3 border-b border-[var(--border)] p-5 sm:grid-cols-2">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Total Barber Share</p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{formatCurrency(totalBarberShare)}</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">Sum across all barbers in this filter.</p>
+          </div>
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Total Shop Share</p>
+            <p className="mt-2 text-2xl font-semibold text-[var(--text)]">{formatCurrency(totalShopShare)}</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">Sum across all barbers in this filter.</p>
+          </div>
+        </div>
+
         <Table>
           <TableHeader>
             <TableRow>

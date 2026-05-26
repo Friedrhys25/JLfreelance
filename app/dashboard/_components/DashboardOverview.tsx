@@ -1,8 +1,7 @@
 "use client";
 
-import Link from "next/link";
 import { BarChart, Bar, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Building, Calendar, Clock3, Download, Plus, Receipt, Scissors, Search, Settings, Trash2, TrendingUp, Users } from "lucide-react";
+import { Building, Calendar, Clock3, Download, Plus, Search, Trash2, TrendingUp, Users } from "lucide-react";
 import { Badge } from "@/app/components/Badge";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
@@ -79,76 +78,24 @@ export function DashboardOverview({
 }: OverviewProps) {
   return (
     <div className="space-y-6">
-      <section className="grid gap-4 xl:grid-cols-[1.7fr_1fr]">
-        <Card className="overflow-hidden border-none bg-[linear-gradient(135deg,#171717_0%,#404040_60%,#737373_100%)] p-7 text-white shadow-[0_24px_60px_-36px_rgba(0,0,0,0.65)]">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-end lg:justify-between">
-            <div className="max-w-2xl space-y-3">
-              <p className="text-xs font-semibold uppercase tracking-[0.22em] text-white/65">
-                Operations Snapshot
-              </p>
-              <h1 className="text-3xl font-semibold leading-tight md:text-4xl">
-                Keep the floor moving while finance and service setup stay one click away.
-              </h1>
-              <p className="max-w-xl text-sm text-white/78">
-                Open service management, pricing settings, and live queue actions from the same dashboard instead of hunting through hidden routes.
-              </p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Button variant="primary" size="lg" onClick={onOpenQueueModal}>
-                <Plus className="h-5 w-5" />
-                New Queue Entry
-              </Button>
-              <Button variant="outline" size="lg" onClick={onExportCSV} className="border-white/20 bg-white/10 text-white hover:bg-white/20">
-                <Download className="h-5 w-5" />
-                Export CSV
-              </Button>
-            </div>
+      <Card className="p-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">Actions</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">Create a queue entry or export the current view.</p>
           </div>
-        </Card>
-
-        <Card className="p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--muted)]">
-                Quick Access
-              </p>
-              <h2 className="mt-1 text-lg font-semibold text-[var(--text)]">
-                Open the missing pages directly
-              </h2>
-            </div>
-            <Receipt className="h-5 w-5 text-[var(--muted)]" />
+          <div className="flex gap-2">
+            <Button variant="primary" size="md" onClick={onOpenQueueModal}>
+              <Plus className="h-4 w-4" />
+              Add Queue
+            </Button>
+            <Button variant="outline" size="md" onClick={onExportCSV}>
+              <Download className="h-4 w-4" />
+              Export CSV
+            </Button>
           </div>
-          <div className="grid gap-3">
-            <Link href="/dashboard/services">
-              <Button variant="outline" size="md" fullWidth className="justify-between">
-                <span className="flex items-center gap-2">
-                  <Scissors className="h-4 w-4" />
-                  Service Catalog
-                </span>
-                Open
-              </Button>
-            </Link>
-            <Link href="/dashboard/services/new">
-              <Button variant="outline" size="md" fullWidth className="justify-between">
-                <span className="flex items-center gap-2">
-                  <Plus className="h-4 w-4" />
-                  Add Service
-                </span>
-                Open
-              </Button>
-            </Link>
-            <Link href="/dashboard/settings">
-              <Button variant="outline" size="md" fullWidth className="justify-between">
-                <span className="flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  Pricing Settings
-                </span>
-                Open
-              </Button>
-            </Link>
-          </div>
-        </Card>
-      </section>
+        </div>
+      </Card>
 
       <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <Card className="p-5">
@@ -426,7 +373,7 @@ export function DashboardOverview({
         <Card className="p-5">
           <div className="flex items-center gap-3">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
-              <Receipt className="h-5 w-5 text-[var(--brand)]" />
+              <TrendingUp className="h-5 w-5 text-[var(--brand)]" />
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Average Ticket</p>
