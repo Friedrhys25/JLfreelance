@@ -7,6 +7,8 @@ import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
 import { Badge } from "@/app/components/Badge";
 import { Modal } from "@/app/components/Modal";
+import { useAuth } from "@/app/contexts/AuthContext";
+import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import {
   Scissors,
   ArrowLeft,
@@ -15,11 +17,6 @@ import {
   Clock,
   Edit,
   Trash2,
-  Home,
-  Settings,
-  LogOut,
-  Menu,
-  X as XIcon,
   Calendar,
   TrendingUp,
   Star,
@@ -45,6 +42,7 @@ const mockService = {
 export default function ServiceDetailsPage() {
   const params = useParams();
   const router = useRouter();
+  const { isAdmin, isClient, logout, user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
 
@@ -58,72 +56,20 @@ export default function ServiceDetailsPage() {
 
   return (
     <div className="min-h-screen">
-      {/* Top Navigation */}
-      <nav className="sticky top-0 z-40 border-b border-(--border) bg-white/80 backdrop-blur">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-(--brand) text-white shadow-(--shadow)">
-                <Scissors className="h-5 w-5" />
-              </div>
-              <span className="hidden text-lg font-semibold tracking-tight text-(--text) sm:block">
-                Barbershop POS
-              </span>
-            </div>
-
-            <div className="hidden md:flex items-center gap-4">
-              <Link href="/dashboard">
-                <Button variant="outline" size="sm">
-                  <Home className="w-4 h-4 mr-2" />
-                  Dashboard
-                </Button>
-              </Link>
-              <Link href="/dashboard/settings">
-                <Button variant="outline" size="sm">
-                  <Settings className="w-4 h-4 mr-2" />
-                  Settings
-                </Button>
-              </Link>
-              <Button variant="error" size="sm">
-                <LogOut className="w-4 h-4 mr-2" />
-                Logout
-              </Button>
-            </div>
-
-            <button
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              className="md:hidden rounded-xl border border-(--border) bg-white p-2 text-(--text) shadow-sm"
-            >
-              {mobileMenuOpen ? (
-                <XIcon className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
-              )}
-            </button>
-          </div>
-
-          {mobileMenuOpen && (
-            <div className="md:hidden mt-4 flex flex-col gap-2 border-t border-(--border) pb-4 pt-4">
-              <Link href="/dashboard">
-                <Button variant="outline" size="sm" fullWidth>
-                  <Home className="h-4 w-4" />
-                  Dashboard
-                </Button>
-              </Link>
-              <Link href="/dashboard/settings">
-                <Button variant="outline" size="sm" fullWidth>
-                  <Settings className="h-4 w-4" />
-                  Settings
-                </Button>
-              </Link>
-              <Button variant="error" size="sm" fullWidth>
-                <LogOut className="h-4 w-4" />
-                Logout
-              </Button>
-            </div>
-          )}
-        </div>
-      </nav>
+      <DashboardTopBar
+        activeTab="overview"
+        activeShortcut="services"
+        branch={user.branch}
+        canManageUsers={isAdmin}
+        canViewExpenses={isAdmin || isClient}
+        mobileMenuOpen={mobileMenuOpen}
+        role={user.role}
+        onLogout={logout}
+        onOpenBarberModal={() => {}}
+        onOpenUserModal={() => {}}
+        onSetMobileMenuOpen={setMobileMenuOpen}
+        onTabChange={(tab) => router.push(tab === "expenses" ? "/dashboard" : "/dashboard")}
+      />
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">
