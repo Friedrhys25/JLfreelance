@@ -55,6 +55,18 @@ export function DashboardExpenses({
 }: DashboardExpensesProps) {
   const totalBarberShare = barberPerformance.reduce((sum, row) => sum + row.barberShare, 0);
   const totalShopShare = barberPerformance.reduce((sum, row) => sum + row.shopShare, 0);
+  const formatTooltipValue = (value: unknown) => {
+    if (typeof value === "number") {
+      return formatCurrency(value);
+    }
+
+    if (typeof value === "string" && value.trim() !== "") {
+      const parsed = Number(value);
+      return Number.isFinite(parsed) ? formatCurrency(parsed) : value;
+    }
+
+    return formatCurrency(0);
+  };
 
   return (
     <div className="space-y-6">
@@ -93,7 +105,7 @@ export function DashboardExpenses({
               <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
               <XAxis dataKey="label" stroke="#525252" />
               <YAxis stroke="#525252" />
-              <Tooltip formatter={(value: number) => formatCurrency(value)} />
+              <Tooltip formatter={(value) => formatTooltipValue(value)} />
               <Legend />
               <Line type="monotone" dataKey="revenue" stroke="#171717" strokeWidth={3} dot={{ fill: "#171717" }} />
               <Line type="monotone" dataKey="expenses" stroke="#f59e0b" strokeWidth={3} dot={{ fill: "#f59e0b" }} />
@@ -132,7 +144,7 @@ export function DashboardExpenses({
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                 <XAxis dataKey="label" stroke="#525252" />
                 <YAxis stroke="#525252" />
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Tooltip formatter={(value) => formatTooltipValue(value)} />
                 <Legend />
                 <Bar dataKey="electricity" stackId="a" fill="#171717" />
                 <Bar dataKey="water" stackId="a" fill="#737373" />
@@ -144,7 +156,7 @@ export function DashboardExpenses({
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                 <XAxis dataKey="label" stroke="#525252" />
                 <YAxis stroke="#525252" />
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Tooltip formatter={(value) => formatTooltipValue(value)} />
                 <Legend />
                 <Area type="monotone" dataKey="electricity" stackId="1" stroke="#171717" fill="#171717" fillOpacity={0.85} />
                 <Area type="monotone" dataKey="water" stackId="1" stroke="#737373" fill="#737373" fillOpacity={0.85} />
@@ -159,7 +171,6 @@ export function DashboardExpenses({
       <Card>
         <div className="border-b border-[var(--border)] p-5">
           <h2 className="text-lg font-semibold text-[var(--text)]">Barber Revenue Split</h2>
-          <p className="text-sm text-[var(--muted)]">60% barber share and 40% shop share based on filtered revenue.</p>
         </div>
 
         <div className="grid gap-3 border-b border-[var(--border)] p-5 sm:grid-cols-2">

@@ -1,17 +1,18 @@
 "use client";
 
 import { BarChart, Bar, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Building, Calendar, Clock3, Download, Plus, Search, Trash2, TrendingUp, Users } from "lucide-react";
+import { Building, Calendar, Clock3, Download, Plus, Trash2, TrendingUp, Users } from "lucide-react";
 import { Badge } from "@/app/components/Badge";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
 import { Input } from "@/app/components/Input";
 import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/Table";
 import type { Barber, Transaction } from "@/app/dashboard/types";
+import type { ApiBranch } from "@/lib/api";
 
 interface OverviewProps {
   barbers: Barber[];
-  branches: string[];
+  branches: ApiBranch[];
   currentPage: number;
   endDate: string;
   filteredTransactions: Transaction[];
@@ -20,7 +21,6 @@ interface OverviewProps {
   paginatedTransactions: Transaction[];
   revenueChartData: Array<{ month: string; revenue: number }>;
   revenueChartType: "bar" | "line";
-  searchTerm: string;
   selectedBranch: string;
   startDate: string;
   todayRevenue: number;
@@ -34,7 +34,6 @@ interface OverviewProps {
   onOpenQueueModal: () => void;
   onPageChange: (page: number) => void;
   onRevenueChartTypeChange: (type: "bar" | "line") => void;
-  onSearchTermChange: (value: string) => void;
   onSelectedBranchChange: (value: string) => void;
   onStartDateChange: (value: string) => void;
   onEndDateChange: (value: string) => void;
@@ -60,7 +59,6 @@ export function DashboardOverview({
   onOpenQueueModal,
   onPageChange,
   onRevenueChartTypeChange,
-  onSearchTermChange,
   onSelectedBranchChange,
   onStartDateChange,
   paginatedTransactions,
@@ -68,7 +66,6 @@ export function DashboardOverview({
   queueCount,
   revenueChartData,
   revenueChartType,
-  searchTerm,
   selectedBranch,
   startDate,
   todayRevenue,
@@ -128,50 +125,6 @@ export function DashboardOverview({
         </Card>
       </section>
 
-      <Card className="p-5">
-        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-5">
-          <Input
-            type="search"
-            label="Search"
-            placeholder="Client, barber, or service"
-            value={searchTerm}
-            onChange={(event) => onSearchTermChange(event.target.value)}
-            icon={<Search className="h-4 w-4" />}
-            className="xl:col-span-2"
-          />
-          <Input
-            type="date"
-            label="Start Date"
-            value={startDate}
-            onChange={(event) => onStartDateChange(event.target.value)}
-            icon={<Calendar className="h-4 w-4" />}
-          />
-          <Input
-            type="date"
-            label="End Date"
-            value={endDate}
-            onChange={(event) => onEndDateChange(event.target.value)}
-            icon={<Calendar className="h-4 w-4" />}
-          />
-          <div className="flex flex-col gap-1.5">
-            <label className="text-sm font-medium text-[var(--muted)]">Branch</label>
-            <select
-              value={selectedBranch}
-              onChange={(event) => onSelectedBranchChange(event.target.value)}
-              disabled={isClient}
-              className="h-10 rounded-lg border border-[var(--border)] bg-white px-4 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)] disabled:bg-[var(--surface-alt)]"
-            >
-              {(isAdmin || !isClient) && <option value="all">All branches</option>}
-              {branches.map((branch) => (
-                <option key={branch} value={branch}>
-                  {branch}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </Card>
-
       <section className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
         <Card className="p-5">
           <div className="mb-4 flex items-center justify-between gap-4">
@@ -203,7 +156,7 @@ export function DashboardOverview({
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                   <XAxis dataKey="month" stroke="#525252" />
                   <YAxis stroke="#525252" />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
                   <Bar dataKey="revenue" radius={[12, 12, 0, 0]} fill="#737373" />
                 </BarChart>
               ) : (
@@ -211,7 +164,7 @@ export function DashboardOverview({
                   <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                   <XAxis dataKey="month" stroke="#525252" />
                   <YAxis stroke="#525252" />
-                  <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                  <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
                   <Line type="monotone" dataKey="revenue" stroke="#171717" strokeWidth={3} dot={{ fill: "#171717" }} />
                 </LineChart>
               )}
@@ -242,13 +195,48 @@ export function DashboardOverview({
                     <Cell key={item.name} fill={PIE_COLORS[index % PIE_COLORS.length]} />
                   ))}
                 </Pie>
-                <Tooltip formatter={(value: number) => formatCurrency(value)} />
+                <Tooltip formatter={(value) => formatCurrency(Number(value ?? 0))} />
                 <Legend />
               </PieChart>
             </ResponsiveContainer>
           </div>
         </Card>
       </section>
+
+      <Card className="p-5">
+        <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+          <Input
+            type="date"
+            label="Start Date"
+            value={startDate}
+            onChange={(event) => onStartDateChange(event.target.value)}
+            icon={<Calendar className="h-4 w-4" />}
+          />
+          <Input
+            type="date"
+            label="End Date"
+            value={endDate}
+            onChange={(event) => onEndDateChange(event.target.value)}
+            icon={<Calendar className="h-4 w-4" />}
+          />
+          <div className="flex flex-col gap-1.5">
+            <label className="text-sm font-medium text-[var(--muted)]">Branch</label>
+            <select
+              value={selectedBranch}
+              onChange={(event) => onSelectedBranchChange(event.target.value)}
+              disabled={isClient}
+              className="h-10 rounded-lg border border-[var(--border)] bg-white px-4 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)] disabled:bg-[var(--surface-alt)]"
+            >
+              {(isAdmin || !isClient) && <option value="all">All branches</option>}
+              {branches.map((branch) => (
+                <option key={branch.id} value={branch.name}>
+                  {branch.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </Card>
 
       <Card>
         <div className="flex flex-col gap-3 border-b border-[var(--border)] p-5 sm:flex-row sm:items-center sm:justify-between">

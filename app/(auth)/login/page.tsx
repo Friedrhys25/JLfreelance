@@ -137,20 +137,6 @@ export default function LoginPage() {
               </Button>
             </form>
 
-            {/* Demo Credentials */}
-            <div className="mt-6 p-4 rounded-lg bg-gray-50 border border-gray-100">
-              <p className="text-xs font-semibold text-gray-800 mb-2">Demo Credentials:</p>
-              <div className="space-y-1 text-xs text-gray-700">
-                <div className="flex justify-between">
-                  <span>Admin:</span>
-                  <code className="bg-white px-2 py-0.5 rounded">admin / admin</code>
-                </div>
-                <div className="flex justify-between">
-                  <span>Cashier:</span>
-                  <code className="bg-white px-2 py-0.5 rounded">cashier / cashier</code>
-                </div>
-              </div>
-            </div>
           </Card>
         </div>
       </div>

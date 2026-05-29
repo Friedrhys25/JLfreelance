@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import { ServiceFormContent } from "@/app/dashboard/services/_components/ServiceFormContent";
+import { createService } from "@/lib/api";
 
 export function NewServicePageContent() {
   const router = useRouter();
@@ -19,9 +20,16 @@ export function NewServicePageContent() {
     status: "active" as "active" | "inactive",
   });
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    console.log("Creating service:", formData);
+    await createService({
+      name: formData.name,
+      description: formData.description,
+      price: Number.parseFloat(formData.price) || 0,
+      duration: formData.duration,
+      taxRate: Number.parseFloat(formData.taxRate) || 0,
+      status: formData.status,
+    });
     router.push("/dashboard/services");
   };
 
@@ -29,14 +37,12 @@ export function NewServicePageContent() {
     <div className="min-h-screen">
       <DashboardTopBar
         activeTab={null}
-        branch={user.branch}
+        branch={user.branch ?? undefined}
         canManageUsers={isAdmin}
         canViewExpenses={isAdmin || isClient}
         mobileMenuOpen={mobileMenuOpen}
         role={user.role}
         onLogout={logout}
-        onOpenBarberModal={() => {}}
-        onOpenUserModal={() => {}}
         onSetMobileMenuOpen={setMobileMenuOpen}
       />
 

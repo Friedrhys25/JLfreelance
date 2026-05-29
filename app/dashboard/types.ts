@@ -9,7 +9,7 @@ export interface Transaction {
   service: string;
   cost: number;
   status: string;
-  branch?: string;
+  branch?: string | null;
 }
 
 export interface Expense {
@@ -19,7 +19,7 @@ export interface Expense {
   water: number;
   rent: number;
   other: number;
-  branch?: string;
+  branch?: string | null;
 }
 
 export interface Service {
@@ -34,7 +34,7 @@ export interface Barber {
   name: string;
   avatar: string;
   specialty: string;
-  branch?: string;
+  branch?: string | null;
 }
 
 export type DashboardTab = "overview" | "expenses";

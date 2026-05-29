@@ -6,12 +6,12 @@ import { Badge } from "@/app/components/Badge";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
 import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/Table";
-import type { ServiceCatalogItem } from "@/app/dashboard/services/service-data";
+import type { ApiService } from "@/lib/api";
 
 interface ServiceCatalogContentProps {
-  filteredServices: ServiceCatalogItem[];
+  filteredServices: ApiService[];
   searchTerm: string;
-  services: ServiceCatalogItem[];
+  services: ApiService[];
   onDelete: (id: string) => void;
   onSearchTermChange: (value: string) => void;
 }

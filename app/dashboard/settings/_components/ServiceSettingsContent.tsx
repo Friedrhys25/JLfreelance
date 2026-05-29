@@ -6,20 +6,38 @@ import { Badge } from "@/app/components/Badge";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
 import { Input } from "@/app/components/Input";
+import { useAuth } from "@/app/contexts/AuthContext";
+import {
+  createService,
+  deleteService as deleteServiceApi,
+  listServiceSplits,
+  listServices,
+  saveServiceSplits,
+  type ApiService,
+} from "@/lib/api";
 import {
   getSplitForServiceName,
-  loadServiceSettings,
-  loadServiceSplits,
   normalizeSplit,
-  saveServiceSettings,
-  saveServiceSplits,
   type ServiceSetting,
   type ServiceSplitSetting,
 } from "@/app/dashboard/settings/service-settings-store";
 
+function mapService(apiService: ApiService): ServiceSetting {
+  return {
+    id: apiService.id,
+    name: apiService.name,
+    price: apiService.price,
+    duration: apiService.duration,
+  };
+}
+
 export function ServiceSettingsContent() {
-  const [services, setServices] = useState<ServiceSetting[]>(() => loadServiceSettings());
-  const [splits, setSplits] = useState<Record<string, ServiceSplitSetting>>(() => loadServiceSplits());
+  const { branches } = useAuth();
+  const [services, setServices] = useState<ServiceSetting[]>([]);
+  const [splits, setSplits] = useState<Record<string, ServiceSplitSetting>>({});
+  const [isDirty, setIsDirty] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedBranchId, setSelectedBranchId] = useState("");
   const [newService, setNewService] = useState({
     name: "",
     price: "",
@@ -27,50 +45,77 @@ export function ServiceSettingsContent() {
   });
 
   useEffect(() => {
-    // Keep settings in sync if another tab updates localStorage.
-    const handler = () => {
-      setServices(loadServiceSettings());
-      setSplits(loadServiceSplits());
+    if (!selectedBranchId && branches.length > 0) {
+      setSelectedBranchId(branches[0].id);
+    }
+  }, [branches, selectedBranchId]);
+
+  useEffect(() => {
+    let isMounted = true;
+    const loadSettings = async () => {
+      if (isMounted) setIsLoading(true);
+      try {
+        const [serviceList, splitList] = await Promise.all([
+          listServices(),
+          selectedBranchId ? listServiceSplits({ branchId: selectedBranchId }) : Promise.resolve([]),
+        ]);
+        if (!isMounted) return;
+
+        setServices(serviceList.map(mapService));
+        const nextSplits: Record<string, ServiceSplitSetting> = {};
+        splitList.forEach((split) => {
+          nextSplits[split.serviceName] = { shopPct: split.shopPct, barberPct: split.barberPct };
+        });
+        setSplits(nextSplits);
+        setIsDirty(false);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
     };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  }, []);
+
+    loadSettings();
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedBranchId]);
 
   const hasUnsavedChanges = useMemo(() => {
-    // We persist on save only; treat any session edit as dirty once services loaded.
-    return services.length > 0;
-  }, [services.length]);
+    return isDirty;
+  }, [isDirty]);
 
   const updateSplit = (serviceName: string, next: Partial<ServiceSplitSetting>) => {
     setSplits((current) => ({
       ...current,
       [serviceName]: normalizeSplit({ ...getSplitForServiceName(current, serviceName), ...next }),
     }));
+    setIsDirty(true);
   };
 
-  const deleteService = (id: string) => {
+  const deleteService = async (id: string) => {
+    await deleteServiceApi(id);
     setServices((current) => current.filter((service) => service.id !== id));
+    setIsDirty(true);
   };
 
-  const addService = () => {
+  const addService = async () => {
     const name = newService.name.trim();
     if (!name) return;
 
     const price = Number.parseFloat(newService.price);
     if (!Number.isFinite(price) || price < 0) return;
 
-    const id = `svc_${Date.now()}`;
     const duration = newService.duration.trim() || "30 min";
 
-    setServices((current) => [
-      ...current,
-      {
-        id,
-        name,
-        price,
-        duration,
-      },
-    ]);
+    const created = await createService({
+      name,
+      description: "",
+      price,
+      duration,
+      taxRate: 0,
+      status: "active",
+    });
+
+    setServices((current) => [...current, mapService(created)]);
 
     setSplits((current) => ({
       ...current,
@@ -78,12 +123,29 @@ export function ServiceSettingsContent() {
     }));
 
     setNewService({ name: "", price: "", duration: "30 min" });
+    setIsDirty(true);
   };
 
-  const handleSave = () => {
-    saveServiceSettings(services);
-    saveServiceSplits(splits);
+  const handleSave = async () => {
+    if (!selectedBranchId) return;
+    const splitPayload = services.map((service) => ({
+      serviceId: service.id,
+      ...getSplitForServiceName(splits, service.name),
+      branchId: selectedBranchId,
+    }));
+    await saveServiceSplits(splitPayload);
+    setIsDirty(false);
   };
+
+  if (isLoading) {
+    return (
+      <main className="container mx-auto px-4 py-8">
+        <Card className="p-8">
+          <p className="text-sm text-(--muted)">Loading settings...</p>
+        </Card>
+      </main>
+    );
+  }
 
   return (
     <main className="container mx-auto px-4 py-8">
@@ -95,9 +157,23 @@ export function ServiceSettingsContent() {
           <div>
             <h1 className="text-3xl font-semibold text-(--text)">Settings</h1>
             <p className="text-sm text-(--muted)">
-              Manage services and configure the default store/barber split per service queue.
+              Manage services and configure store/barber splits per branch.
             </p>
           </div>
+        </div>
+        <div className="mt-4 flex max-w-sm flex-col gap-1.5">
+          <label className="text-sm font-medium text-(--muted)">Branch</label>
+          <select
+            value={selectedBranchId}
+            onChange={(event) => setSelectedBranchId(event.target.value)}
+            className="h-10 rounded-lg border border-(--border) bg-white px-4 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light)"
+          >
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </select>
         </div>
       </div>
 
@@ -160,10 +236,7 @@ export function ServiceSettingsContent() {
                     </div>
                   </div>
 
-                  <div className="mt-3 text-xs text-(--muted)">
-                    Split applied: <span className="font-semibold text-(--text)">{split.shopPct}% store</span> /{" "}
-                    <span className="font-semibold text-(--text)">{split.barberPct}% barber</span>
-                  </div>
+                  
                 </div>
               );
             })}
@@ -209,7 +282,7 @@ export function ServiceSettingsContent() {
           <Card className="p-6">
             <h3 className="text-lg font-semibold text-(--text)">Save Changes</h3>
             <p className="mt-1 text-sm text-(--muted)">
-              Saves services and splits to this device (localStorage).
+              Saves services and splits to the database.
             </p>
             <Button
               variant="outline"

@@ -1,8 +1,10 @@
 "use client";
 
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building, LogOut, Menu, Receipt, Scissors, Settings, TrendingUp, Users, X } from "lucide-react";
+import { Building, LogOut, Menu, Receipt, Scissors, Settings, TrendingUp, X } from "lucide-react";
 import { Button } from "@/app/components/Button";
+import { Modal } from "@/app/components/Modal";
 import type { DashboardTab } from "@/app/dashboard/types";
 
 interface DashboardTopBarProps {
@@ -14,8 +16,6 @@ interface DashboardTopBarProps {
   branch?: string;
   role?: string | null;
   onLogout: () => void;
-  onOpenBarberModal: () => void;
-  onOpenUserModal: () => void;
   onSetMobileMenuOpen: (isOpen: boolean) => void;
 }
 
@@ -28,11 +28,10 @@ export function DashboardTopBar({
   branch,
   role,
   onLogout,
-  onOpenBarberModal,
-  onOpenUserModal,
   onSetMobileMenuOpen,
 }: DashboardTopBarProps) {
   const router = useRouter();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
   const closeMobileMenu = () => onSetMobileMenuOpen(false);
 
   const openTab = (tab: DashboardTab) => {
@@ -50,7 +49,7 @@ export function DashboardTopBar({
             </div>
             <div className="hidden sm:block">
               <span className="block text-lg font-semibold text-[var(--text)]">
-                Barbershop POS
+                IDENTITY
               </span>
               <span className="text-xs capitalize text-[var(--muted)]">
                 {role ?? "guest"} view
@@ -91,20 +90,8 @@ export function DashboardTopBar({
               <Settings className="h-4 w-4" />
               Settings
             </Button>
-            {canViewExpenses && (
-              <Button variant="outline" size="sm" onClick={onOpenBarberModal}>
-                <Users className="h-4 w-4" />
-                Add Barber
-              </Button>
-            )}
-            {canManageUsers && (
-              <Button variant="outline" size="sm" onClick={onOpenUserModal}>
-                <Users className="h-4 w-4" />
-                Users
-              </Button>
-            )}
             <div className="h-6 w-px bg-[var(--border)]" />
-            <Button variant="ghost" size="sm" onClick={onLogout}>
+            <Button variant="ghost" size="sm" onClick={() => setLogoutConfirmOpen(true)}>
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -152,41 +139,38 @@ export function DashboardTopBar({
               <Settings className="h-4 w-4" />
               Settings
             </Button>
-            {canViewExpenses && (
-              <Button
-                variant="outline"
-                size="sm"
-                fullWidth
-                onClick={() => {
-                  onOpenBarberModal();
-                  closeMobileMenu();
-                }}
-              >
-                <Users className="h-4 w-4" />
-                Add Barber
-              </Button>
-            )}
-            {canManageUsers && (
-              <Button
-                variant="outline"
-                size="sm"
-                fullWidth
-                onClick={() => {
-                  onOpenUserModal();
-                  closeMobileMenu();
-                }}
-              >
-                <Users className="h-4 w-4" />
-                Users
-              </Button>
-            )}
-            <Button variant="error" size="sm" fullWidth onClick={onLogout}>
+            <Button variant="error" size="sm" fullWidth onClick={() => setLogoutConfirmOpen(true)}>
               <LogOut className="h-4 w-4" />
               Logout
             </Button>
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={logoutConfirmOpen}
+        onClose={() => setLogoutConfirmOpen(false)}
+        title="Confirm logout"
+        footer={
+          <div className="flex w-full gap-2">
+            <Button variant="outline" onClick={() => setLogoutConfirmOpen(false)} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              variant="error"
+              onClick={() => {
+                setLogoutConfirmOpen(false);
+                onLogout();
+              }}
+              className="flex-1"
+            >
+              Logout
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-[var(--muted)]">Are you sure you want to log out?</p>
+      </Modal>
     </nav>
   );
 }
