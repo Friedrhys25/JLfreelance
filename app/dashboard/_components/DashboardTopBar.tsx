@@ -32,6 +32,7 @@ export function DashboardTopBar({
 }: DashboardTopBarProps) {
   const router = useRouter();
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const closeMobileMenu = () => onSetMobileMenuOpen(false);
 
   const openTab = (tab: DashboardTab) => {
@@ -150,26 +151,37 @@ export function DashboardTopBar({
       <Modal
         isOpen={logoutConfirmOpen}
         onClose={() => setLogoutConfirmOpen(false)}
-        title="Confirm logout"
+        title="Logout"
         footer={
-          <div className="flex w-full gap-2">
-            <Button variant="outline" onClick={() => setLogoutConfirmOpen(false)} className="flex-1">
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setLogoutConfirmOpen(false)}
+              disabled={isLoggingOut}
+              className="flex-1"
+            >
               Cancel
             </Button>
             <Button
               variant="error"
-              onClick={() => {
-                setLogoutConfirmOpen(false);
-                onLogout();
+              onClick={async () => {
+                setIsLoggingOut(true);
+                try {
+                  await Promise.resolve(onLogout());
+                } finally {
+                  setIsLoggingOut(false);
+                  setLogoutConfirmOpen(false);
+                }
               }}
+              disabled={isLoggingOut}
               className="flex-1"
             >
-              Logout
+              {isLoggingOut ? "Logging out..." : "Logout"}
             </Button>
           </div>
         }
       >
-        <p className="text-sm text-[var(--muted)]">Are you sure you want to log out?</p>
+        <p className="text-sm text-(--text)">Are you sure you want to logout?</p>
       </Modal>
     </nav>
   );

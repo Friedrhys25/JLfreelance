@@ -9,6 +9,7 @@ export interface Transaction {
   service: string;
   cost: number;
   status: string;
+  branchId?: string | null;
   branch?: string | null;
 }
 
@@ -34,6 +35,7 @@ export interface Barber {
   name: string;
   avatar: string;
   specialty: string;
+  branchId?: string | null;
   branch?: string | null;
 }
 

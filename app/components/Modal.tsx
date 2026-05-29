@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 
 interface ModalProps {
@@ -18,9 +19,11 @@ export function Modal({
   children,
   footer,
 }: ModalProps) {
-  if (!isOpen) return null;
+  const portalContainer = typeof document === "undefined" ? null : document.body;
 
-  return (
+  if (!isOpen || !portalContainer) return null;
+
+  return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       {/* Backdrop */}
       <div
@@ -53,6 +56,7 @@ export function Modal({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    portalContainer
   );
 }

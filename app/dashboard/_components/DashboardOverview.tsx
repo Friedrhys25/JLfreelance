@@ -16,8 +16,9 @@ interface OverviewProps {
   currentPage: number;
   endDate: string;
   filteredTransactions: Transaction[];
-  isAdmin: boolean;
-  isClient: boolean;
+  isCashier: boolean;
+  isBranchLocked: boolean;
+  lockedBranchId?: string | null;
   paginatedTransactions: Transaction[];
   revenueChartData: Array<{ month: string; revenue: number }>;
   revenueChartType: "bar" | "line";
@@ -51,8 +52,9 @@ export function DashboardOverview({
   filteredTransactions,
   formatCurrency,
   formatDate,
-  isAdmin,
-  isClient,
+  isCashier,
+  isBranchLocked,
+  lockedBranchId,
   onDeleteTransaction,
   onEndDateChange,
   onExportCSV,
@@ -94,36 +96,38 @@ export function DashboardOverview({
         </div>
       </Card>
 
-      <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <Card className="p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-            Total Revenue
-          </p>
-          <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{formatCurrency(totalRevenue)}</p>
-          <p className="mt-2 text-sm text-[var(--muted)]">Filtered revenue across selected dates and branch.</p>
-        </Card>
-        <Card className="p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-            Today Revenue
-          </p>
-          <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{formatCurrency(todayRevenue)}</p>
-          <p className="mt-2 text-sm text-[var(--muted)]">Based on today&apos;s completed and queued entries.</p>
-        </Card>
-        <Card className="p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-            Transactions
-          </p>
-          <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{totalTransactions}</p>
-          <p className="mt-2 text-sm text-[var(--muted)]">Filtered records currently shown in the table.</p>
-        </Card>
-        <Card className="p-5">
-          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
-            Queue Status
-          </p>
-          <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{queueCount}</p>
-          <p className="mt-2 text-sm text-[var(--muted)]">{barbers.length} barbers available for assignment.</p>
-        </Card>
-      </section>
+      {!isCashier && (
+        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+          <Card className="p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+              Total Revenue
+            </p>
+            <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{formatCurrency(totalRevenue)}</p>
+            <p className="mt-2 text-sm text-[var(--muted)]">Filtered revenue across selected dates and branch.</p>
+          </Card>
+          <Card className="p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+              Today Revenue
+            </p>
+            <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{formatCurrency(todayRevenue)}</p>
+            <p className="mt-2 text-sm text-[var(--muted)]">Based on today&apos;s completed and queued entries.</p>
+          </Card>
+          <Card className="p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+              Transactions
+            </p>
+            <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{totalTransactions}</p>
+            <p className="mt-2 text-sm text-[var(--muted)]">Filtered records currently shown in the table.</p>
+          </Card>
+          <Card className="p-5">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+              Queue Status
+            </p>
+            <p className="mt-3 text-3xl font-semibold text-[var(--text)]">{queueCount}</p>
+            <p className="mt-2 text-sm text-[var(--muted)]">{barbers.length} barbers available for assignment.</p>
+          </Card>
+        </section>
+      )}
 
       <section className="grid gap-4 xl:grid-cols-[1.6fr_1fr]">
         <Card className="p-5">
@@ -224,15 +228,16 @@ export function DashboardOverview({
             <select
               value={selectedBranch}
               onChange={(event) => onSelectedBranchChange(event.target.value)}
-              disabled={isClient}
+              disabled={isBranchLocked}
               className="h-10 rounded-lg border border-[var(--border)] bg-white px-4 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)] disabled:bg-[var(--surface-alt)]"
             >
-              {(isAdmin || !isClient) && <option value="all">All branches</option>}
-              {branches.map((branch) => (
+              {!isBranchLocked && <option value="all">All branches</option>}
+              {(isBranchLocked && lockedBranchId ? branches.filter((branch) => branch.id === lockedBranchId) : branches).map((branch) => (
                 <option key={branch.id} value={branch.name}>
                   {branch.name}
                 </option>
               ))}
+              {isBranchLocked && !lockedBranchId && <option value="">No branch assigned</option>}
             </select>
           </div>
         </div>
@@ -335,43 +340,45 @@ export function DashboardOverview({
         )}
       </Card>
 
-      <section className="grid gap-4 md:grid-cols-3">
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
-              <Users className="h-5 w-5 text-[var(--brand)]" />
+      {!isCashier && (
+        <section className="grid gap-4 md:grid-cols-3">
+          <Card className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
+                <Users className="h-5 w-5 text-[var(--brand)]" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Barbers</p>
+                <p className="text-2xl font-semibold text-[var(--text)]">{barbers.length}</p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Barbers</p>
-              <p className="text-2xl font-semibold text-[var(--text)]">{barbers.length}</p>
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
+                <Building className="h-5 w-5 text-[var(--brand)]" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Branches</p>
+                <p className="text-2xl font-semibold text-[var(--text)]">{branches.length}</p>
+              </div>
             </div>
-          </div>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
-              <Building className="h-5 w-5 text-[var(--brand)]" />
+          </Card>
+          <Card className="p-5">
+            <div className="flex items-center gap-3">
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
+                <TrendingUp className="h-5 w-5 text-[var(--brand)]" />
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Average Ticket</p>
+                <p className="text-2xl font-semibold text-[var(--text)]">
+                  {formatCurrency(totalTransactions > 0 ? totalRevenue / totalTransactions : 0)}
+                </p>
+              </div>
             </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Branches</p>
-              <p className="text-2xl font-semibold text-[var(--text)]">{branches.length}</p>
-            </div>
-          </div>
-        </Card>
-        <Card className="p-5">
-          <div className="flex items-center gap-3">
-            <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
-              <TrendingUp className="h-5 w-5 text-[var(--brand)]" />
-            </div>
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Average Ticket</p>
-              <p className="text-2xl font-semibold text-[var(--text)]">
-                {formatCurrency(totalTransactions > 0 ? totalRevenue / totalTransactions : 0)}
-              </p>
-            </div>
-          </div>
-        </Card>
-      </section>
+          </Card>
+        </section>
+      )}
     </div>
   );
 }

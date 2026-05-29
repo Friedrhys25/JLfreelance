@@ -30,6 +30,27 @@ export function SettingsPageContent() {
   });
 
   const resolveBranchId = (branchName: string) => branches.find((branch) => branch.name === branchName)?.id ?? null;
+  const resolveBranchName = (branchId?: string | null) => branches.find((branch) => branch.id === branchId)?.name ?? null;
+  const clientBranchId = isClient ? user.branchId ?? resolveBranchId(user.branch ?? "") : null;
+  const clientBranchName = isClient ? user.branch ?? resolveBranchName(clientBranchId) : null;
+  const barberBranchName = isClient ? clientBranchName ?? "" : newBarber.branch;
+  const barberBranchId = isClient ? clientBranchId : resolveBranchId(newBarber.branch);
+  const barberBranchOptions = isClient && clientBranchId
+    ? branches.filter((branch) => branch.id === clientBranchId)
+    : branches;
+  const canAddBarber = Boolean(newBarber.name.trim()) && Boolean(barberBranchId);
+
+  const resetNewBarber = () => {
+    setNewBarber({ name: "", specialty: "", branch: clientBranchName ?? branches[0]?.name ?? "Main Branch" });
+  };
+
+  const openAddBarberModal = () => {
+    setNewBarber((current) => ({
+      ...current,
+      branch: clientBranchName ?? current.branch ?? branches[0]?.name ?? "Main Branch",
+    }));
+    setAddBarberModalOpen(true);
+  };
 
   return (
     <div className="min-h-screen">
@@ -59,7 +80,7 @@ export function SettingsPageContent() {
                 Add Branch
               </Button>
             )}
-            <Button variant="outline" onClick={() => setAddBarberModalOpen(true)}>
+            <Button variant="outline" onClick={openAddBarberModal}>
               <Scissors className="h-4 w-4" />
               Add Barber
             </Button>
@@ -130,7 +151,7 @@ export function SettingsPageContent() {
         isOpen={addBarberModalOpen}
         onClose={() => {
           setAddBarberModalOpen(false);
-          setNewBarber({ name: "", specialty: "", branch: "Main Branch" });
+          resetNewBarber();
         }}
         title="Add Barber"
         footer={
@@ -139,7 +160,7 @@ export function SettingsPageContent() {
               variant="outline"
               onClick={() => {
                 setAddBarberModalOpen(false);
-                setNewBarber({ name: "", specialty: "", branch: "Main Branch" });
+                resetNewBarber();
               }}
               className="flex-1"
             >
@@ -148,19 +169,20 @@ export function SettingsPageContent() {
             <Button
               variant="primary"
               onClick={() => {
-                if (!newBarber.name.trim()) {
+                if (!canAddBarber) {
                   return;
                 }
 
                 createBarber({
                   name: newBarber.name.trim(),
                   specialty: newBarber.specialty,
-                  branchId: resolveBranchId(newBarber.branch),
+                  branchId: barberBranchId,
                 }).finally(() => {
-                  setNewBarber({ name: "", specialty: "", branch: "Main Branch" });
+                  resetNewBarber();
                   setAddBarberModalOpen(false);
                 });
               }}
+              disabled={!canAddBarber}
               className="flex-1"
             >
               Add Barber
@@ -191,16 +213,24 @@ export function SettingsPageContent() {
               Branch Location
             </label>
             <select
-              value={newBarber.branch}
-              onChange={(event) => setNewBarber((current) => ({ ...current, branch: event.target.value }))}
+              value={barberBranchName}
+              onChange={(event) => {
+                if (isClient) return;
+                setNewBarber((current) => ({ ...current, branch: event.target.value }));
+              }}
+              disabled={isClient}
               className="w-full rounded-lg border border-[var(--border)] bg-white px-4 py-2.5 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
             >
-              {branches.map((branch) => (
+              {barberBranchOptions.map((branch) => (
                 <option key={branch.id} value={branch.name}>
                   {branch.name}
                 </option>
               ))}
+              {isClient && !clientBranchId && <option value="">No branch assigned</option>}
             </select>
+            {isClient && !clientBranchId && (
+              <p className="mt-2 text-xs text-red-600">Your account needs a branch before adding a barber.</p>
+            )}
           </div>
         </div>
       </Modal>

@@ -11,7 +11,7 @@ import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import { useAuth } from "@/app/contexts/AuthContext";
 import type { Barber, Expense, Transaction } from "@/app/dashboard/types";
 import { createExpense, listBarbers, listExpenses, listServiceSplits, listTransactions } from "@/lib/api";
-import { getSplitForServiceName } from "@/app/dashboard/settings/service-settings-store";
+import { getSplitForServiceName, type ServiceSplitSetting } from "@/app/dashboard/settings/service-settings-store";
 
 export default function DashboardExpensesPage() {
   const router = useRouter();
@@ -19,16 +19,15 @@ export default function DashboardExpensesPage() {
   const currentMonthKey = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" }).slice(0, 7);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [expensesModalOpen, setExpensesModalOpen] = useState(false);
-  const [expenseChartType, setExpenseChartType] = useState<"bar" | "area">("bar");
   const [selectedBranch, setSelectedBranch] = useState("all");
   const [startMonth, setStartMonth] = useState(currentMonthKey);
   const [endMonth, setEndMonth] = useState(currentMonthKey);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [expenses, setExpenses] = useState<Expense[]>([]);
   const [barbers, setBarbers] = useState<Barber[]>([]);
-  const [serviceSplits, setServiceSplits] = useState<Record<string, { shopPct: number; barberPct: number }>>({});
+  const [serviceSplitsByBranch, setServiceSplitsByBranch] = useState<Record<string, Record<string, ServiceSplitSetting>>>({});
   const [expenseDraft, setExpenseDraft] = useState({
-    month: new Date().toISOString().slice(0, 7),
+    month: currentMonthKey,
     electricity: "",
     water: "",
     rent: "",
@@ -70,7 +69,7 @@ export default function DashboardExpensesPage() {
             endMonth: endMonth || undefined,
           }),
           listBarbers(),
-          selectedBranchId ? listServiceSplits({ branchId: selectedBranchId }) : Promise.resolve([]),
+          listServiceSplits(selectedBranchId ? { branchId: selectedBranchId } : undefined),
         ]);
 
         if (!isMounted) return;
@@ -78,17 +77,21 @@ export default function DashboardExpensesPage() {
         setTransactions(transactionsData);
         setExpenses(expensesData);
         setBarbers(barbersData);
-        const splitMap: Record<string, { shopPct: number; barberPct: number }> = {};
+        const splitMap: Record<string, Record<string, ServiceSplitSetting>> = {};
         splitsData.forEach((split) => {
-          splitMap[split.serviceName] = { shopPct: split.shopPct, barberPct: split.barberPct };
+          if (!split.branchId) return;
+          splitMap[split.branchId] = {
+            ...(splitMap[split.branchId] ?? {}),
+            [split.serviceName]: { shopPct: split.shopPct, barberPct: split.barberPct },
+          };
         });
-        setServiceSplits(splitMap);
+        setServiceSplitsByBranch(splitMap);
       } catch {
         if (!isMounted) return;
         setTransactions([]);
         setExpenses([]);
         setBarbers([]);
-        setServiceSplits({});
+        setServiceSplitsByBranch({});
       }
     };
 
@@ -107,6 +110,30 @@ export default function DashboardExpensesPage() {
   const filteredTransactions = useMemo(() => transactions, [transactions]);
 
   const filteredExpenses = useMemo(() => expenses, [expenses]);
+
+  const findExpenseLog = (month: string) =>
+    filteredExpenses.find((expense) => expense.month === month && expense.branch === effectiveSelectedBranch);
+
+  const buildExpenseDraft = (month: string) => {
+    const existingExpense = findExpenseLog(month);
+    return {
+      month,
+      electricity: existingExpense ? String(existingExpense.electricity) : "",
+      water: existingExpense ? String(existingExpense.water) : "",
+      rent: existingExpense ? String(existingExpense.rent) : "",
+      other: existingExpense ? String(existingExpense.other) : "",
+    };
+  };
+
+  const openExpensesModal = () => {
+    setExpenseDraft(buildExpenseDraft(currentMonthKey));
+    setExpensesModalOpen(true);
+  };
+
+  const closeExpensesModal = () => {
+    setExpensesModalOpen(false);
+    setExpenseDraft(buildExpenseDraft(currentMonthKey));
+  };
 
   const monthlyRevenue = filteredTransactions.reduce<Record<string, number>>((accumulator, transaction) => {
     const month = transaction.date.slice(0, 7);
@@ -169,15 +196,21 @@ export default function DashboardExpensesPage() {
   const netProfit = currentMonthRevenue - totalExpenses;
   const roi = totalExpenses > 0 ? (netProfit / totalExpenses) * 100 : 0;
 
+  const getSplitForTransaction = (transaction: Transaction) => {
+    const transactionBranchId =
+      transaction.branchId ?? resolveBranchId(transaction.branch ?? "") ?? selectedBranchId ?? "";
+    return getSplitForServiceName(serviceSplitsByBranch[transactionBranchId] ?? {}, transaction.service);
+  };
+
   const barberPerformance = barbers.map((barber) => {
     const barberTransactions = filteredTransactions.filter((transaction) => transaction.barber === barber.name);
     const barberRevenue = barberTransactions.reduce((sum, transaction) => sum + transaction.cost, 0);
     const barberShare = barberTransactions.reduce((sum, transaction) => {
-      const split = getSplitForServiceName(serviceSplits, transaction.service);
+      const split = getSplitForTransaction(transaction);
       return sum + transaction.cost * (split.barberPct / 100);
     }, 0);
     const shopShare = barberTransactions.reduce((sum, transaction) => {
-      const split = getSplitForServiceName(serviceSplits, transaction.service);
+      const split = getSplitForTransaction(transaction);
       return sum + transaction.cost * (split.shopPct / 100);
     }, 0);
     return {
@@ -248,7 +281,7 @@ export default function DashboardExpensesPage() {
                 ))}
               </select>
             </div>
-            <Button variant="outline" size="md" onClick={() => setExpensesModalOpen(true)} className="sm:mb-0">
+            <Button variant="outline" size="md" onClick={openExpensesModal} className="sm:mb-0">
               <Receipt className="h-4 w-4" />
               Log Monthly Expenses
             </Button>
@@ -257,12 +290,10 @@ export default function DashboardExpensesPage() {
 
         <DashboardExpenses
           barberPerformance={barberPerformance}
-          expenseChartType={expenseChartType}
           formatCurrency={formatCurrency}
           monthlyExpenses={monthlyExpenses}
           monthlyFinancials={monthlyFinancials}
           netProfit={netProfit}
-          onExpenseChartTypeChange={setExpenseChartType}
           roi={roi}
           selectedBranch={effectiveSelectedBranch}
           totalExpenses={totalExpenses}
@@ -272,20 +303,11 @@ export default function DashboardExpensesPage() {
 
       <Modal
         isOpen={expensesModalOpen}
-        onClose={() => {
-          setExpensesModalOpen(false);
-          setExpenseDraft({
-            month: new Date().toISOString().slice(0, 7),
-            electricity: "",
-            water: "",
-            rent: "",
-            other: "",
-          });
-        }}
+        onClose={closeExpensesModal}
         title="Monthly Expenses"
         footer={
           <div className="flex w-full gap-2">
-            <Button variant="outline" onClick={() => setExpensesModalOpen(false)} className="flex-1">
+            <Button variant="outline" onClick={closeExpensesModal} className="flex-1">
               Close
             </Button>
             <Button
@@ -300,15 +322,13 @@ export default function DashboardExpensesPage() {
                   other: Number(expenseDraft.other || 0),
                   branchId: resolveBranchId(effectiveSelectedBranch),
                 });
-                setExpenses((current) => [created, ...current]);
-                setExpensesModalOpen(false);
-                setExpenseDraft({
-                  month: new Date().toISOString().slice(0, 7),
-                  electricity: "",
-                  water: "",
-                  rent: "",
-                  other: "",
+                setExpenses((current) => {
+                  const withoutExisting = current.filter(
+                    (expense) => !(expense.month === created.month && expense.branch === created.branch)
+                  );
+                  return [created, ...withoutExisting];
                 });
+                closeExpensesModal();
               }}
               className="flex-1"
               disabled={effectiveSelectedBranch === "all"}
@@ -323,7 +343,7 @@ export default function DashboardExpensesPage() {
             type="month"
             label="Month"
             value={expenseDraft.month}
-            onChange={(event) => setExpenseDraft((current) => ({ ...current, month: event.target.value }))}
+            onChange={(event) => setExpenseDraft(buildExpenseDraft(event.target.value))}
           />
           <div className="grid grid-cols-2 gap-4">
             <div>

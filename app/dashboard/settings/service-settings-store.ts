@@ -10,13 +10,15 @@ export interface ServiceSplitSetting {
   barberPct: number;
 }
 
+export const BRANCH_SPLIT_KEY = "__branch";
+
 const DEFAULT_SPLIT: ServiceSplitSetting = { shopPct: 60, barberPct: 40 };
 
 export function getSplitForServiceName(
   splits: Record<string, ServiceSplitSetting>,
   serviceName: string
 ): ServiceSplitSetting {
-  return splits[serviceName] ?? DEFAULT_SPLIT;
+  return splits[serviceName] ?? splits[BRANCH_SPLIT_KEY] ?? DEFAULT_SPLIT;
 }
 
 export function normalizeSplit(input: Partial<ServiceSplitSetting>): ServiceSplitSetting {

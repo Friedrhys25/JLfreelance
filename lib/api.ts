@@ -34,6 +34,8 @@ export interface ApiService {
   duration: string;
   taxRate: number;
   status: "active" | "inactive";
+  branchId?: string | null;
+  branch?: string | null;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -47,6 +49,7 @@ export interface ApiTransaction {
   service: string;
   cost: number;
   status: string;
+  branchId?: string | null;
   branch?: string | null;
 }
 
@@ -169,8 +172,11 @@ export async function createBarber(input: { name: string; specialty?: string; av
   });
 }
 
-export async function listServices() {
-  return apiFetch<ApiService[]>("/services");
+export async function listServices(params?: { branchId?: string }) {
+  const search = new URLSearchParams();
+  if (params?.branchId) search.set("branchId", params.branchId);
+  const suffix = search.toString() ? `?${search.toString()}` : "";
+  return apiFetch<ApiService[]>(`/services${suffix}`);
 }
 
 export async function getService(id: string) {
@@ -184,6 +190,7 @@ export async function createService(input: {
   duration: string;
   taxRate: number;
   status: "active" | "inactive";
+  branchId?: string | null;
 }) {
   return apiFetch<ApiService>("/services", {
     method: "POST",
@@ -220,7 +227,7 @@ export async function listServiceSplits(params?: { branchId?: string }) {
 }
 
 export async function saveServiceSplits(
-  input: Array<{ serviceId: string; shopPct: number; barberPct: number; branchId: string }>
+  input: Array<{ serviceId?: string | null; shopPct: number; barberPct: number; branchId: string }>
 ) {
   return apiFetch<{ ok: true }>("/service-splits", {
     method: "PUT",

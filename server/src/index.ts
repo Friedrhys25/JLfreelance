@@ -14,6 +14,8 @@ const firstOrNull = <T,>(value: T | T[] | null | undefined): T | null => {
   return value ?? null;
 };
 
+const isBranchScopedRole = (role?: string | null) => role === "client" || role === "cashier";
+
 app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
 
@@ -193,7 +195,12 @@ app.delete("/users/:id", requireAuth, requireAdmin, async (req, res) => {
 app.get("/barbers", requireAuth, async (req, res) => {
   let query = supabase.from("barbers").select("id, name, avatar, specialty, branch:branches(id, name)");
 
-  if (req.user?.role === "client" && req.user.branchId) {
+  if (isBranchScopedRole(req.user?.role) && !req.user?.branchId) {
+    res.json([]);
+    return;
+  }
+
+  if (isBranchScopedRole(req.user?.role) && req.user.branchId) {
     query = query.eq("branch_id", req.user.branchId);
   }
 
@@ -219,7 +226,7 @@ app.get("/barbers", requireAuth, async (req, res) => {
   );
 });
 
-app.post("/barbers", requireAuth, requireAdmin, async (req, res) => {
+app.post("/barbers", requireAuth, async (req, res) => {
   const { name, avatar, specialty, branchId } = req.body as {
     name?: string;
     avatar?: string;
@@ -232,9 +239,20 @@ app.post("/barbers", requireAuth, requireAdmin, async (req, res) => {
     return;
   }
 
+  const resolvedBranchId = isBranchScopedRole(req.user?.role) ? req.user.branchId ?? null : branchId ?? null;
+  if (isBranchScopedRole(req.user?.role) && !resolvedBranchId) {
+    res.status(403).json({ error: "Branch is required" });
+    return;
+  }
+
   const { data, error } = await supabase
     .from("barbers")
-    .insert({ name, avatar: avatar ?? name.slice(0, 2).toUpperCase(), specialty: specialty ?? null, branch_id: branchId ?? null })
+    .insert({
+      name,
+      avatar: avatar ?? name.slice(0, 2).toUpperCase(),
+      specialty: specialty ?? null,
+      branch_id: resolvedBranchId,
+    })
     .select("id, name, avatar, specialty, branch:branches(id, name)")
     .single();
 
@@ -254,11 +272,24 @@ app.post("/barbers", requireAuth, requireAdmin, async (req, res) => {
   });
 });
 
-app.get("/services", requireAuth, async (_req, res) => {
-  const { data, error } = await supabase
+app.get("/services", requireAuth, async (req, res) => {
+  const { branchId } = req.query as { branchId?: string };
+  let query = supabase
     .from("services")
-    .select("id, name, description, price, duration, tax_rate, status")
+    .select("id, name, description, price, duration, tax_rate, status, branch_id")
     .order("name");
+
+  const enforcedBranchId = isBranchScopedRole(req.user?.role) ? req.user.branchId : branchId;
+  if (isBranchScopedRole(req.user?.role) && !enforcedBranchId) {
+    res.json([]);
+    return;
+  }
+
+  if (enforcedBranchId) {
+    query = query.eq("branch_id", enforcedBranchId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     res.status(500).json({ error: error.message });
@@ -266,15 +297,18 @@ app.get("/services", requireAuth, async (_req, res) => {
   }
 
   res.json(
-    (data ?? []).map((row) => ({
-      id: row.id,
-      name: row.name,
-      description: row.description ?? "",
-      price: Number(row.price),
-      duration: row.duration,
-      taxRate: Number(row.tax_rate),
-      status: row.status,
-    }))
+    (data ?? []).map((row) => {
+      return {
+        id: row.id,
+        name: row.name,
+        description: row.description ?? "",
+        price: Number(row.price),
+        duration: row.duration,
+        taxRate: Number(row.tax_rate),
+        status: row.status,
+        branchId: row.branch_id ?? null,
+      };
+    })
   );
 });
 
@@ -305,13 +339,14 @@ app.get("/services/:id", requireAuth, async (req, res) => {
 });
 
 app.post("/services", requireAuth, requireAdmin, async (req, res) => {
-  const { name, description, price, duration, taxRate, status } = req.body as {
+  const { name, description, price, duration, taxRate, status, branchId } = req.body as {
     name?: string;
     description?: string;
     price?: number;
     duration?: string;
     taxRate?: number;
     status?: "active" | "inactive";
+    branchId?: string | null;
   };
 
   if (!name || !duration) {
@@ -328,8 +363,9 @@ app.post("/services", requireAuth, requireAdmin, async (req, res) => {
       duration,
       tax_rate: taxRate ?? 0,
       status: status ?? "active",
+      branch_id: branchId ?? null,
     })
-    .select("id, name, description, price, duration, tax_rate, status")
+    .select("id, name, description, price, duration, tax_rate, status, branch_id")
     .single();
 
   if (error || !data) {
@@ -345,6 +381,7 @@ app.post("/services", requireAuth, requireAdmin, async (req, res) => {
     duration: data.duration,
     taxRate: Number(data.tax_rate),
     status: data.status,
+    branchId: data.branch_id ?? null,
   });
 });
 
@@ -392,6 +429,38 @@ app.put("/services/:id", requireAuth, requireAdmin, async (req, res) => {
 
 app.delete("/services/:id", requireAuth, requireAdmin, async (req, res) => {
   const { id } = req.params;
+  const { count, error: countError } = await supabase
+    .from("transactions")
+    .select("id", { count: "exact", head: true })
+    .eq("service_id", id);
+
+  if (countError) {
+    res.status(500).json({ error: countError.message });
+    return;
+  }
+
+  if (count && count > 0) {
+    const { error: archiveError } = await supabase
+      .from("services")
+      .update({ status: "inactive", updated_at: new Date().toISOString() })
+      .eq("id", id);
+
+    if (archiveError) {
+      res.status(500).json({ error: archiveError.message });
+      return;
+    }
+
+    res.status(200).json({ archived: true });
+    return;
+  }
+
+  const { error: splitError } = await supabase.from("service_splits").delete().eq("service_id", id);
+
+  if (splitError) {
+    res.status(500).json({ error: splitError.message });
+    return;
+  }
+
   const { error } = await supabase.from("services").delete().eq("id", id);
 
   if (error) {
@@ -438,10 +507,21 @@ app.put("/services/bulk", requireAuth, requireAdmin, async (req, res) => {
 
 app.get("/service-splits", requireAuth, async (req, res) => {
   const { branchId } = req.query as { branchId?: string };
-  const { data, error } = await supabase
+  let query = supabase
     .from("service_splits")
-    .select("shop_pct, barber_pct, branch_id, service:services(name)")
-    .eq("branch_id", branchId ?? "");
+    .select("shop_pct, barber_pct, branch_id, service:services(name)");
+
+  const enforcedBranchId = isBranchScopedRole(req.user?.role) ? req.user.branchId : branchId;
+  if (isBranchScopedRole(req.user?.role) && !enforcedBranchId) {
+    res.json([]);
+    return;
+  }
+
+  if (enforcedBranchId) {
+    query = query.eq("branch_id", enforcedBranchId);
+  }
+
+  const { data, error } = await query;
 
   if (error) {
     res.status(500).json({ error: error.message });
@@ -452,7 +532,7 @@ app.get("/service-splits", requireAuth, async (req, res) => {
     (data ?? []).map((row) => {
       const service = firstOrNull(row.service);
       return {
-        serviceName: service?.name ?? "",
+        serviceName: service?.name ?? "__branch",
         shopPct: row.shop_pct,
         barberPct: row.barber_pct,
         branchId: row.branch_id ?? null,
@@ -463,7 +543,7 @@ app.get("/service-splits", requireAuth, async (req, res) => {
 
 app.put("/service-splits", requireAuth, requireAdmin, async (req, res) => {
   const { splits } = req.body as {
-    splits?: Array<{ serviceId: string; shopPct: number; barberPct: number; branchId?: string | null }>;
+    splits?: Array<{ serviceId?: string | null; shopPct: number; barberPct: number; branchId?: string | null }>;
   };
 
   if (!splits || !Array.isArray(splits)) {
@@ -476,15 +556,30 @@ app.put("/service-splits", requireAuth, requireAdmin, async (req, res) => {
     return;
   }
 
-  const { error } = await supabase.from("service_splits").upsert(
-    splits.map((split) => ({
-      service_id: split.serviceId,
-      branch_id: split.branchId,
-      shop_pct: split.shopPct,
-      barber_pct: split.barberPct,
-    })),
-    { onConflict: "service_id,branch_id" }
+  const mutations = await Promise.all(
+    splits.map(async (split) => {
+      let existingQuery = supabase.from("service_splits").select("id").eq("branch_id", split.branchId).limit(1);
+      existingQuery = split.serviceId ? existingQuery.eq("service_id", split.serviceId) : existingQuery.is("service_id", null);
+
+      const { data: existingSplit, error: existingError } = await existingQuery.maybeSingle();
+      if (existingError) return existingError;
+
+      const payload = {
+        service_id: split.serviceId ?? null,
+        branch_id: split.branchId,
+        shop_pct: split.shopPct,
+        barber_pct: split.barberPct,
+      };
+
+      const { error } = existingSplit
+        ? await supabase.from("service_splits").update(payload).eq("id", existingSplit.id)
+        : await supabase.from("service_splits").insert(payload);
+
+      return error;
+    })
   );
+
+  const error = mutations.find(Boolean);
 
   if (error) {
     res.status(500).json({ error: error.message });
@@ -509,7 +604,12 @@ app.get("/transactions", requireAuth, async (req, res) => {
     )
     .order("date", { ascending: false });
 
-  const enforcedBranchId = req.user?.role === "client" ? req.user.branchId : branchId;
+  const enforcedBranchId = isBranchScopedRole(req.user?.role) ? req.user.branchId : branchId;
+  if (isBranchScopedRole(req.user?.role) && !enforcedBranchId) {
+    res.json([]);
+    return;
+  }
+
   if (enforcedBranchId) {
     query = query.eq("branch_id", enforcedBranchId);
   }
@@ -547,6 +647,7 @@ app.get("/transactions", requireAuth, async (req, res) => {
       service: service?.name ?? "",
       cost: Number(row.cost),
       status: row.status,
+      branchId: branch?.id ?? null,
       branch: branch?.name ?? null,
       };
     })
@@ -587,7 +688,11 @@ app.post("/transactions", requireAuth, async (req, res) => {
     timeZone: "Asia/Manila",
   });
 
-  const resolvedBranchId = req.user?.role === "client" ? req.user.branchId ?? null : branchId ?? null;
+  const resolvedBranchId = isBranchScopedRole(req.user?.role) ? req.user.branchId ?? null : branchId ?? null;
+  if (isBranchScopedRole(req.user?.role) && !resolvedBranchId) {
+    res.status(403).json({ error: "Branch is required" });
+    return;
+  }
 
   const { data, error } = await supabase
     .from("transactions")
@@ -602,7 +707,7 @@ app.post("/transactions", requireAuth, async (req, res) => {
       branch_id: resolvedBranchId,
     })
     .select(
-      "id, date, time, client_name, status, cost, barber:barbers(name), service:services(name), branch:branches(name)"
+      "id, date, time, client_name, status, cost, barber:barbers(name), service:services(name), branch:branches(id, name)"
     )
     .single();
 
@@ -623,6 +728,7 @@ app.post("/transactions", requireAuth, async (req, res) => {
     service: createdService?.name ?? "",
     cost: Number(data.cost),
     status: data.status,
+    branchId: createdBranch?.id ?? null,
     branch: createdBranch?.name ?? null,
   });
 });
@@ -711,18 +817,36 @@ app.post("/expenses", requireAuth, async (req, res) => {
     return;
   }
 
-  const { data, error } = await supabase
+  let existingQuery = supabase
     .from("expenses")
-    .insert({
-      month,
-      electricity: electricity ?? 0,
-      water: water ?? 0,
-      rent: rent ?? 0,
-      other: other ?? 0,
-      branch_id: resolvedBranchId,
-    })
-    .select("id, month, electricity, water, rent, other, branch:branches(id, name)")
-    .single();
+    .select("id")
+    .eq("month", month)
+    .order("created_at", { ascending: true })
+    .limit(1);
+
+  existingQuery = resolvedBranchId ? existingQuery.eq("branch_id", resolvedBranchId) : existingQuery.is("branch_id", null);
+
+  const { data: existingExpense, error: existingError } = await existingQuery.maybeSingle();
+
+  if (existingError) {
+    res.status(500).json({ error: existingError.message });
+    return;
+  }
+
+  const payload = {
+    month,
+    electricity: electricity ?? 0,
+    water: water ?? 0,
+    rent: rent ?? 0,
+    other: other ?? 0,
+    branch_id: resolvedBranchId,
+  };
+
+  const mutation = existingExpense
+    ? supabase.from("expenses").update(payload).eq("id", existingExpense.id)
+    : supabase.from("expenses").insert(payload);
+
+  const { data, error } = await mutation.select("id, month, electricity, water, rent, other, branch:branches(id, name)").single();
 
   if (error || !data) {
     res.status(500).json({ error: error?.message || "Failed to create expense" });
@@ -730,7 +854,7 @@ app.post("/expenses", requireAuth, async (req, res) => {
   }
 
   const expenseBranch = firstOrNull(data.branch);
-  res.status(201).json({
+  res.status(existingExpense ? 200 : 201).json({
     id: data.id,
     month: data.month,
     electricity: Number(data.electricity),

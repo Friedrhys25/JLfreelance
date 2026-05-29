@@ -1,8 +1,7 @@
 "use client";
 
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
+import { CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { Badge } from "@/app/components/Badge";
-import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
 import { Table, TableCell, TableHead, TableHeader, TableRow } from "@/app/components/Table";
 
@@ -14,7 +13,6 @@ interface DashboardExpensesProps {
     barberShare: number;
     shopShare: number;
   }>;
-  expenseChartType: "bar" | "area";
   formatCurrency: (amount: number) => string;
   monthlyExpenses: Array<{
     month: string;
@@ -37,17 +35,16 @@ interface DashboardExpensesProps {
   selectedBranch: string;
   totalExpenses: number;
   totalRevenue: number;
-  onExpenseChartTypeChange: (type: "bar" | "area") => void;
 }
+
+const EXPENSE_BREAKDOWN_COLORS = ["#171717", "#737373", "#f59e0b", "#d4d4d4"];
 
 export function DashboardExpenses({
   barberPerformance,
-  expenseChartType,
   formatCurrency,
   monthlyExpenses,
   monthlyFinancials,
   netProfit,
-  onExpenseChartTypeChange,
   roi,
   selectedBranch,
   totalExpenses,
@@ -55,6 +52,24 @@ export function DashboardExpenses({
 }: DashboardExpensesProps) {
   const totalBarberShare = barberPerformance.reduce((sum, row) => sum + row.barberShare, 0);
   const totalShopShare = barberPerformance.reduce((sum, row) => sum + row.shopShare, 0);
+  const expenseBreakdownData = [
+    {
+      name: "Electricity",
+      value: monthlyExpenses.reduce((sum, row) => sum + row.electricity, 0),
+    },
+    {
+      name: "Water",
+      value: monthlyExpenses.reduce((sum, row) => sum + row.water, 0),
+    },
+    {
+      name: "Rent",
+      value: monthlyExpenses.reduce((sum, row) => sum + row.rent, 0),
+    },
+    {
+      name: "Other",
+      value: monthlyExpenses.reduce((sum, row) => sum + row.other, 0),
+    },
+  ].filter((item) => item.value > 0);
   const formatTooltipValue = (value: unknown) => {
     if (typeof value === "number") {
       return formatCurrency(value);
@@ -99,72 +114,62 @@ export function DashboardExpenses({
           </div>
           <Badge variant="neutral">{monthlyFinancials.length} months</Badge>
         </div>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={monthlyFinancials}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-              <XAxis dataKey="label" stroke="#525252" />
-              <YAxis stroke="#525252" />
-              <Tooltip formatter={(value) => formatTooltipValue(value)} />
-              <Legend />
-              <Line type="monotone" dataKey="revenue" stroke="#171717" strokeWidth={3} dot={{ fill: "#171717" }} />
-              <Line type="monotone" dataKey="expenses" stroke="#f59e0b" strokeWidth={3} dot={{ fill: "#f59e0b" }} />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </Card>
-
-      <Card className="p-5">
-        <div className="mb-4 flex items-center justify-between gap-4">
-          <div>
-            <h2 className="text-lg font-semibold text-[var(--text)]">Expense Breakdown</h2>
-            <p className="text-sm text-[var(--muted)]">Utilities and operating costs by month.</p>
-          </div>
-          <div className="flex gap-2">
-            <Button
-              variant={expenseChartType === "bar" ? "primary" : "outline"}
-              size="sm"
-              onClick={() => onExpenseChartTypeChange("bar")}
-            >
-              Bars
-            </Button>
-            <Button
-              variant={expenseChartType === "area" ? "primary" : "outline"}
-              size="sm"
-              onClick={() => onExpenseChartTypeChange("area")}
-            >
-              Area
-            </Button>
-          </div>
-        </div>
-        <div className="h-80">
-          <ResponsiveContainer width="100%" height="100%">
-            {expenseChartType === "bar" ? (
-              <BarChart data={monthlyExpenses}>
+        <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_260px]">
+          <div className="h-80">
+            <ResponsiveContainer width="100%" height="100%">
+              <LineChart data={monthlyFinancials}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
                 <XAxis dataKey="label" stroke="#525252" />
                 <YAxis stroke="#525252" />
                 <Tooltip formatter={(value) => formatTooltipValue(value)} />
                 <Legend />
-                <Bar dataKey="electricity" stackId="a" fill="#171717" />
-                <Bar dataKey="water" stackId="a" fill="#737373" />
-                <Bar dataKey="rent" stackId="a" fill="#f59e0b" />
-                <Bar dataKey="other" stackId="a" fill="#d4d4d4" />
-              </BarChart>
-            ) : (
-              <AreaChart data={monthlyExpenses}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e5e5e5" />
-                <XAxis dataKey="label" stroke="#525252" />
-                <YAxis stroke="#525252" />
-                <Tooltip formatter={(value) => formatTooltipValue(value)} />
-                <Legend />
-                <Area type="monotone" dataKey="electricity" stackId="1" stroke="#171717" fill="#171717" fillOpacity={0.85} />
-                <Area type="monotone" dataKey="water" stackId="1" stroke="#737373" fill="#737373" fillOpacity={0.85} />
-                <Area type="monotone" dataKey="rent" stackId="1" stroke="#f59e0b" fill="#f59e0b" fillOpacity={0.85} />
-                <Area type="monotone" dataKey="other" stackId="1" stroke="#d4d4d4" fill="#d4d4d4" fillOpacity={0.9} />
-              </AreaChart>
-            )}
-          </ResponsiveContainer>
+                <Line type="monotone" dataKey="revenue" stroke="#171717" strokeWidth={3} dot={{ fill: "#171717" }} />
+                <Line type="monotone" dataKey="expenses" stroke="#f59e0b" strokeWidth={3} dot={{ fill: "#f59e0b" }} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-alt)] p-4">
+            <div className="mb-2">
+              <h3 className="text-sm font-semibold text-[var(--text)]">Expense Breakdown</h3>
+              <p className="text-xs text-[var(--muted)]">Cost mix for the selected months.</p>
+            </div>
+            <div className="h-52">
+              {expenseBreakdownData.length > 0 ? (
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={expenseBreakdownData}
+                      dataKey="value"
+                      nameKey="name"
+                      innerRadius={45}
+                      outerRadius={72}
+                      paddingAngle={3}
+                    >
+                      {expenseBreakdownData.map((item, index) => (
+                        <Cell key={item.name} fill={EXPENSE_BREAKDOWN_COLORS[index % EXPENSE_BREAKDOWN_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => formatTooltipValue(value)} />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center rounded-full border border-dashed border-[var(--border)] text-xs text-[var(--muted)]">
+                  No expenses
+                </div>
+              )}
+            </div>
+            <div className="mt-2 grid grid-cols-2 gap-2">
+              {expenseBreakdownData.map((item, index) => (
+                <div key={item.name} className="flex items-center gap-2 text-xs text-[var(--muted)]">
+                  <span
+                    className="h-2.5 w-2.5 rounded-full"
+                    style={{ backgroundColor: EXPENSE_BREAKDOWN_COLORS[index % EXPENSE_BREAKDOWN_COLORS.length] }}
+                  />
+                  <span>{item.name}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </Card>
 

@@ -55,15 +55,13 @@ export default function DashboardPage() {
 
     const loadData = async () => {
       try {
-        const [barbersData, servicesData] = await Promise.all([listBarbers(), listServices()]);
+        const barbersData = await listBarbers();
 
         if (!isMounted) return;
         setBarbers(barbersData);
-        setServices(servicesData);
       } catch {
         if (!isMounted) return;
         setBarbers([]);
-        setServices([]);
       }
     };
 
@@ -73,10 +71,33 @@ export default function DashboardPage() {
     };
   }, [isAuthenticated]);
 
-  const effectiveSelectedBranch = isClient && user.branch ? user.branch : selectedBranch;
-  const canViewExpenses = isAdmin || isClient;
   const resolveBranchId = (branchName: string) => branches.find((branch) => branch.name === branchName)?.id ?? null;
+  const resolveBranchName = (branchId?: string | null) => branches.find((branch) => branch.id === branchId)?.name ?? null;
+  const isBranchLocked = isClient || isCashier;
+  const lockedBranchId = isBranchLocked ? user.branchId ?? resolveBranchId(user.branch ?? "") : null;
+  const lockedBranchName = isBranchLocked ? user.branch ?? resolveBranchName(lockedBranchId) : null;
+  const effectiveSelectedBranch = isBranchLocked ? lockedBranchName ?? "" : selectedBranch;
+  const canViewExpenses = isAdmin || isClient;
   const selectedBranchId = effectiveSelectedBranch === "all" ? undefined : resolveBranchId(effectiveSelectedBranch) ?? undefined;
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let isMounted = true;
+
+    const loadServices = async () => {
+      try {
+        const servicesData = await listServices({ branchId: selectedBranchId });
+        if (isMounted) setServices(servicesData);
+      } catch {
+        if (isMounted) setServices([]);
+      }
+    };
+
+    loadServices();
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, selectedBranchId]);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-PH", {
@@ -200,8 +221,8 @@ export default function DashboardPage() {
     }
 
     try {
-      const branchId = isClient && user.branchId
-        ? user.branchId
+      const branchId = isBranchLocked && lockedBranchId
+        ? lockedBranchId
         : selectedBranch === "all"
           ? null
           : resolveBranchId(selectedBranch);
@@ -293,8 +314,9 @@ export default function DashboardPage() {
           filteredTransactions={filteredTransactions}
           formatCurrency={formatCurrency}
           formatDate={formatDate}
-          isAdmin={isAdmin}
-          isClient={isClient}
+          isCashier={isCashier}
+          isBranchLocked={isBranchLocked}
+          lockedBranchId={lockedBranchId}
           onDeleteTransaction={(id) => {
             setPendingDeleteId(id);
             setDeleteQueueModalOpen(true);
