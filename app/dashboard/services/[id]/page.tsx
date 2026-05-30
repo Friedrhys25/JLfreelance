@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
@@ -9,6 +9,7 @@ import { Badge } from "@/app/components/Badge";
 import { Modal } from "@/app/components/Modal";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
+import { deleteService, getService, type ApiService } from "@/lib/api";
 import {
   Scissors,
   ArrowLeft,
@@ -22,53 +23,102 @@ import {
   Star,
 } from "lucide-react";
 
-// Mock service data
-const mockService = {
-  id: "1",
-  name: "Haircut",
-  description:
-    "Professional haircut service including consultation, wash, cut, and style. Our experienced barbers will work with you to achieve your desired look.",
-  price: 35.0,
-  taxRate: 10,
-  status: "active" as "active" | "inactive",
-  duration: "30 min",
-  createdAt: "2026-01-15",
-  updatedAt: "2026-04-20",
-  totalBookings: 245,
-  revenue: 8575.0,
-  rating: 4.8,
-};
-
 export default function ServiceDetailsPage() {
   const params = useParams();
   const router = useRouter();
   const { isAdmin, isClient, logout, user } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
+  const [service, setService] = useState<ApiService | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const service = mockService;
-  const priceWithTax = service.price * (1 + service.taxRate / 100);
+  const serviceId = typeof params.id === "string" ? params.id : Array.isArray(params.id) ? params.id[0] : "";
 
-  const handleDelete = () => {
-    console.log("Deleting service:", params.id);
+  useEffect(() => {
+    let isMounted = true;
+    const loadService = async () => {
+      try {
+        const data = await getService(serviceId);
+        if (isMounted) setService(data);
+      } catch {
+        if (isMounted) setService(null);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    if (serviceId) {
+      loadService();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [serviceId]);
+
+  const priceWithTax = service ? service.price * (1 + service.taxRate / 100) : 0;
+
+  const handleDelete = async () => {
+    if (!serviceId) return;
+    await deleteService(serviceId);
     router.push("/dashboard/services");
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen">
+        <DashboardTopBar
+          activeTab="overview"
+          branch={user.branch ?? undefined}
+          canManageUsers={isAdmin}
+          canViewExpenses={isAdmin || isClient}
+          mobileMenuOpen={mobileMenuOpen}
+          role={user.role}
+          onLogout={logout}
+          onSetMobileMenuOpen={setMobileMenuOpen}
+        />
+        <main className="container mx-auto px-4 py-8">
+          <Card className="p-6">
+            <p className="text-sm text-(--muted)">Loading service...</p>
+          </Card>
+        </main>
+      </div>
+    );
+  }
+
+  if (!service) {
+    return (
+      <div className="min-h-screen">
+        <DashboardTopBar
+          activeTab="overview"
+          branch={user.branch ?? undefined}
+          canManageUsers={isAdmin}
+          canViewExpenses={isAdmin || isClient}
+          mobileMenuOpen={mobileMenuOpen}
+          role={user.role}
+          onLogout={logout}
+          onSetMobileMenuOpen={setMobileMenuOpen}
+        />
+        <main className="container mx-auto px-4 py-8">
+          <Card className="p-6">
+            <p className="text-sm text-(--muted)">Service not found.</p>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">
       <DashboardTopBar
         activeTab="overview"
-        activeShortcut="services"
-        branch={user.branch}
+        branch={user.branch ?? undefined}
         canManageUsers={isAdmin}
         canViewExpenses={isAdmin || isClient}
         mobileMenuOpen={mobileMenuOpen}
         role={user.role}
         onLogout={logout}
-        onOpenBarberModal={() => {}}
-        onOpenUserModal={() => {}}
         onSetMobileMenuOpen={setMobileMenuOpen}
-        onTabChange={(tab) => router.push(tab === "expenses" ? "/dashboard" : "/dashboard")}
       />
 
       {/* Main Content */}
@@ -198,7 +248,7 @@ export default function ServiceDetailsPage() {
                       Created
                     </p>
                     <p className="text-sm font-semibold text-(--text)">
-                      {service.createdAt}
+                      {service.createdAt ? new Date(service.createdAt).toLocaleDateString("en-US") : "-"}
                     </p>
                   </div>
                 </div>
@@ -209,7 +259,7 @@ export default function ServiceDetailsPage() {
                       Last Updated
                     </p>
                     <p className="text-sm font-semibold text-(--text)">
-                      {service.updatedAt}
+                      {service.updatedAt ? new Date(service.updatedAt).toLocaleDateString("en-US") : "-"}
                     </p>
                   </div>
                 </div>
@@ -234,7 +284,7 @@ export default function ServiceDetailsPage() {
                     </span>
                   </div>
                   <p className="text-2xl font-semibold text-(--text)">
-                    {service.totalBookings}
+                    0
                   </p>
                 </div>
 
@@ -246,7 +296,7 @@ export default function ServiceDetailsPage() {
                     </span>
                   </div>
                   <p className="text-2xl font-semibold text-(--text)">
-                    ${service.revenue.toFixed(2)}
+                    $0.00
                   </p>
                 </div>
 
@@ -258,11 +308,7 @@ export default function ServiceDetailsPage() {
                     </span>
                   </div>
                   <p className="text-2xl font-semibold text-(--text)">
-                    {service.rating}
-                    <span className="text-sm text-(--muted)">
-                      {" "}
-                      / 5.0
-                    </span>
+                    -
                   </p>
                 </div>
               </div>

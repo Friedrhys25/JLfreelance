@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Button } from "@/app/components/Button";
 import { Modal } from "@/app/components/Modal";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import { ServiceCatalogContent } from "@/app/dashboard/services/_components/ServiceCatalogContent";
-import { mockServices } from "@/app/dashboard/services/service-data";
+import { deleteService, listServices, type ApiService } from "@/lib/api";
 
 export function ServicesPageContent() {
   const { isAdmin, isClient, logout, user } = useAuth();
@@ -14,8 +14,27 @@ export function ServicesPageContent() {
   const [deleteModalOpen, setDeleteModalOpen] = useState(false);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [services, setServices] = useState<ApiService[]>([]);
 
-  const filteredServices = mockServices.filter((service) =>
+  useEffect(() => {
+    let isMounted = true;
+
+    const loadServices = async () => {
+      try {
+        const data = await listServices();
+        if (isMounted) setServices(data);
+      } catch {
+        if (isMounted) setServices([]);
+      }
+    };
+
+    loadServices();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  const filteredServices = services.filter((service) =>
     service.name.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
@@ -24,8 +43,10 @@ export function ServicesPageContent() {
     setDeleteModalOpen(true);
   };
 
-  const confirmDelete = () => {
-    console.log("Deleting service:", selectedService);
+  const confirmDelete = async () => {
+    if (!selectedService) return;
+    await deleteService(selectedService);
+    setServices((current) => current.filter((service) => service.id !== selectedService));
     setDeleteModalOpen(false);
     setSelectedService(null);
   };
@@ -34,22 +55,19 @@ export function ServicesPageContent() {
     <div className="min-h-screen">
       <DashboardTopBar
         activeTab={null}
-        activeShortcut="services"
-        branch={user.branch}
+        branch={user.branch ?? undefined}
         canManageUsers={isAdmin}
         canViewExpenses={isAdmin || isClient}
         mobileMenuOpen={mobileMenuOpen}
         role={user.role}
         onLogout={logout}
-        onOpenBarberModal={() => {}}
-        onOpenUserModal={() => {}}
         onSetMobileMenuOpen={setMobileMenuOpen}
       />
 
       <ServiceCatalogContent
         filteredServices={filteredServices}
         searchTerm={searchTerm}
-        services={mockServices}
+        services={services}
         onDelete={handleDelete}
         onSearchTermChange={setSearchTerm}
       />

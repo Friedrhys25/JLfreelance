@@ -1,52 +1,49 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building, CheckCircle, ChevronRight, Droplet, Receipt, Scissors, User, Users, Zap } from "lucide-react";
+import { CheckCircle, ChevronRight, User } from "lucide-react";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
 import { Input } from "@/app/components/Input";
 import { Modal } from "@/app/components/Modal";
 import { useAuth } from "@/app/contexts/AuthContext";
-import { BARBER_SPECIALTIES, INITIAL_BARBERS, INITIAL_TRANSACTIONS, SERVICES } from "@/app/dashboard/dashboard-data";
 import { DashboardOverview } from "@/app/dashboard/_components/DashboardOverview";
 import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import type { Barber, Transaction } from "@/app/dashboard/types";
+import {
+  completeTransaction,
+  createTransaction,
+  deleteTransaction as deleteTransactionApi,
+  listBarbers,
+  listServices,
+  listTransactions,
+  type ApiService,
+} from "@/lib/api";
 
 const ITEMS_PER_PAGE = 10;
 
 export default function DashboardPage() {
   const router = useRouter();
-  const { addUser, branches, deleteUser, isAdmin, isAuthenticated, isCashier, isClient, logout, user, users } = useAuth();
+  const { branches, isAdmin, isAuthenticated, isCashier, isClient, logout, user } = useAuth();
+  const todayKey = new Date().toLocaleDateString("en-CA", { timeZone: "Asia/Manila" });
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [posModalOpen, setPosModalOpen] = useState(false);
-  const [expensesModalOpen, setExpensesModalOpen] = useState(false);
-  const [addBarberModalOpen, setAddBarberModalOpen] = useState(false);
-  const [addUserModalOpen, setAddUserModalOpen] = useState(false);
   const [posStep, setPosStep] = useState(1);
   const [selectedBarber, setSelectedBarber] = useState<string | null>(null);
   const [selectedService, setSelectedService] = useState<string | null>(null);
   const [clientName, setClientName] = useState("");
-  const [barbers, setBarbers] = useState<Barber[]>(INITIAL_BARBERS);
-  const [transactions, setTransactions] = useState<Transaction[]>(INITIAL_TRANSACTIONS);
-  const [searchTerm, setSearchTerm] = useState("");
-  const [startDate, setStartDate] = useState("");
-  const [endDate, setEndDate] = useState("");
+  const [barbers, setBarbers] = useState<Barber[]>([]);
+  const [services, setServices] = useState<ApiService[]>([]);
+  const [transactions, setTransactions] = useState<Transaction[]>([]);
+  const [startDate, setStartDate] = useState(todayKey);
+  const [endDate, setEndDate] = useState(todayKey);
   const [currentPage, setCurrentPage] = useState(1);
   const [revenueChartType, setRevenueChartType] = useState<"bar" | "line">("bar");
   const [selectedBranch, setSelectedBranch] = useState("all");
-  const [newUser, setNewUser] = useState({
-    username: "",
-    password: "",
-    role: "cashier" as "admin" | "cashier" | "client",
-    branch: "Main Branch",
-  });
-  const [newBarber, setNewBarber] = useState({
-    name: "",
-    specialty: "Haircut" as typeof BARBER_SPECIALTIES[number],
-    branch: "Main Branch",
-  });
-  const transactionSequence = useRef(INITIAL_TRANSACTIONS.length);
+  const [deleteQueueModalOpen, setDeleteQueueModalOpen] = useState(false);
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isSubmittingQueue, setIsSubmittingQueue] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -54,8 +51,68 @@ export default function DashboardPage() {
     }
   }, [isAuthenticated, router]);
 
-  const effectiveSelectedBranch = isClient && user.branch ? user.branch : selectedBranch;
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let isMounted = true;
+
+    const loadData = async () => {
+      try {
+        const barbersData = await listBarbers();
+
+        if (!isMounted) return;
+        setBarbers(barbersData);
+      } catch {
+        if (!isMounted) return;
+        setBarbers([]);
+      }
+    };
+
+    loadData();
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated]);
+
+  const resolveBranchId = (branchName: string) => branches.find((branch) => branch.name === branchName)?.id ?? null;
+  const resolveBranchName = (branchId?: string | null) => branches.find((branch) => branch.id === branchId)?.name ?? null;
+  const isBranchLocked = isClient || isCashier;
+  const lockedBranchId = isBranchLocked ? user.branchId ?? resolveBranchId(user.branch ?? "") : null;
+  const lockedBranchName = isBranchLocked ? user.branch ?? resolveBranchName(lockedBranchId) : null;
+  const effectiveSelectedBranch = isBranchLocked ? lockedBranchName ?? "" : selectedBranch;
   const canViewExpenses = isAdmin || isClient;
+  const selectedBranchId = effectiveSelectedBranch === "all" ? undefined : resolveBranchId(effectiveSelectedBranch) ?? undefined;
+  const mainBranch = branches.find((branch) => branch.name.toLowerCase() === "main branch")
+    ?? branches.find((branch) => branch.name.toLowerCase().includes("main"));
+  const adminQueueBranchName = user.branch ?? mainBranch?.name ?? "Main Branch";
+  const adminQueueBranchId = isAdmin ? resolveBranchId(adminQueueBranchName) : null;
+  const queueBranchId = isAdmin ? adminQueueBranchId : lockedBranchId;
+  const queueBranchName = isAdmin ? adminQueueBranchName : lockedBranchName;
+  const getItemBranchName = (branchId?: string | null, branchName?: string | null) =>
+    branchName ?? resolveBranchName(branchId) ?? "Main Branch";
+  const isInQueueBranch = (branchId?: string | null, branchName?: string | null) => {
+    if (!isAdmin) return true;
+    if (!queueBranchId) return false;
+    return branchId === queueBranchId || getItemBranchName(branchId, branchName) === queueBranchName;
+  };
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let isMounted = true;
+
+    const loadServices = async () => {
+      try {
+        const servicesData = await listServices(isBranchLocked ? { branchId: selectedBranchId } : undefined);
+        if (isMounted) setServices(servicesData);
+      } catch {
+        if (isMounted) setServices([]);
+      }
+    };
+
+    loadServices();
+    return () => {
+      isMounted = false;
+    };
+  }, [isAuthenticated, isBranchLocked, selectedBranchId]);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-PH", {
@@ -63,28 +120,53 @@ export default function DashboardPage() {
       currency: "PHP",
     }).format(amount);
 
-  const formatDate = (dateStr: string) =>
-    new Date(dateStr).toLocaleDateString("en-US", {
+  const formatDate = (dateStr: string) => {
+    const [year, month, day] = dateStr.split("-").map(Number);
+    const date = new Date(year, month - 1, day);
+    return date.toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "numeric",
     });
+  };
 
   const filteredTransactions = useMemo(() => {
     return transactions.filter((transaction) => {
-      const matchesSearch =
-        transaction.clientName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        transaction.barber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        transaction.service.toLowerCase().includes(searchTerm.toLowerCase());
       const matchesStartDate = startDate ? transaction.date >= startDate : true;
       const matchesEndDate = endDate ? transaction.date <= endDate : true;
       const matchesBranch =
         effectiveSelectedBranch === "all" ||
         (transaction.branch ?? "Main Branch") === effectiveSelectedBranch;
 
-      return matchesSearch && matchesStartDate && matchesEndDate && matchesBranch;
+      return matchesStartDate && matchesEndDate && matchesBranch;
     });
-  }, [effectiveSelectedBranch, endDate, searchTerm, startDate, transactions]);
+  }, [effectiveSelectedBranch, endDate, startDate, transactions]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let isMounted = true;
+
+    const loadTransactions = async () => {
+      try {
+        const transactionsData = await listTransactions({
+          branchId: selectedBranchId,
+          startDate: startDate || undefined,
+          endDate: endDate || undefined,
+        });
+
+        if (!isMounted) return;
+        setTransactions(transactionsData);
+      } catch {
+        if (!isMounted) return;
+        setTransactions([]);
+      }
+    };
+
+    loadTransactions();
+    return () => {
+      isMounted = false;
+    };
+  }, [endDate, isAuthenticated, selectedBranchId, startDate]);
 
   const queueCount = filteredTransactions.filter((transaction) => transaction.status === "queued").length;
   const totalPages = Math.max(1, Math.ceil(filteredTransactions.length / ITEMS_PER_PAGE));
@@ -95,21 +177,37 @@ export default function DashboardPage() {
   );
 
   const totalRevenue = filteredTransactions.reduce((sum, transaction) => sum + transaction.cost, 0);
-  const todayKey = new Date().toISOString().split("T")[0];
   const todayRevenue = filteredTransactions
     .filter((transaction) => transaction.date === todayKey)
     .reduce((sum, transaction) => sum + transaction.cost, 0);
 
-  const monthlyRevenue = filteredTransactions.reduce<Record<string, number>>((accumulator, transaction) => {
-    const month = transaction.date.slice(0, 7);
-    accumulator[month] = (accumulator[month] ?? 0) + transaction.cost;
-    return accumulator;
-  }, {});
+  const isSingleDayRange = Boolean(startDate && endDate && startDate === endDate);
 
-  const revenueChartData = Object.entries(monthlyRevenue).map(([month, revenue]) => ({
-    month: new Date(`${month}-01`).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
-    revenue,
-  }));
+  const revenueChartData = isSingleDayRange
+    ? Object.entries(
+        filteredTransactions.reduce<Record<string, number>>((accumulator, transaction) => {
+          const dateKey = transaction.date;
+          accumulator[dateKey] = (accumulator[dateKey] ?? 0) + transaction.cost;
+          return accumulator;
+        }, {})
+      ).map(([dateKey, revenue]) => ({
+        month: formatDate(dateKey),
+        revenue,
+      }))
+    : Object.entries(
+        filteredTransactions.reduce<Record<string, number>>((accumulator, transaction) => {
+          const month = transaction.date.slice(0, 7);
+          accumulator[month] = (accumulator[month] ?? 0) + transaction.cost;
+          return accumulator;
+        }, {})
+      ).map(([month, revenue]) => {
+        const [year, monthIndex] = month.split("-").map(Number);
+        const labelDate = new Date(year, monthIndex - 1, 1);
+        return {
+          month: labelDate.toLocaleDateString("en-US", { month: "long" }),
+          revenue,
+        };
+      });
 
   const pieChartData = Object.entries(
     filteredTransactions.reduce<Record<string, number>>((accumulator, transaction) => {
@@ -125,43 +223,73 @@ export default function DashboardPage() {
     setClientName("");
   };
 
-  const handleAddToQueue = () => {
-    if (!selectedBarber || !selectedService || !clientName.trim()) {
+  const selectedBarberItem = barbers.find((item) => item.id === selectedBarber);
+  const selectedServiceItem = services.find((item) => item.id === selectedService);
+  const selectedBarberAllowed = selectedBarberItem ? isInQueueBranch(selectedBarberItem.branchId, selectedBarberItem.branch) : false;
+  const selectedServiceAllowed = selectedServiceItem ? isInQueueBranch(selectedServiceItem.branchId, selectedServiceItem.branch) : false;
+  const queueBarbers = isAdmin ? barbers.filter((barber) => isInQueueBranch(barber.branchId, barber.branch)) : barbers;
+  const queueServices = isAdmin ? services.filter((service) => isInQueueBranch(service.branchId, service.branch)) : services;
+
+  const handleAddToQueue = async () => {
+    if (!selectedBarber || !selectedService || !clientName.trim() || isSubmittingQueue) {
       return;
     }
 
-    transactionSequence.current += 1;
-    const now = new Date();
     const barber = barbers.find((item) => item.id === selectedBarber);
-    const service = SERVICES.find((item) => item.id === selectedService);
+    const service = services.find((item) => item.id === selectedService);
 
-    if (!barber || !service) {
+    if (!barber || !service || !isInQueueBranch(barber.branchId, barber.branch) || !isInQueueBranch(service.branchId, service.branch)) {
       return;
     }
 
-    const newTransaction: Transaction = {
-      id: `txn_${transactionSequence.current}`,
-      date: now.toISOString().split("T")[0],
-      time: now.toLocaleTimeString("en-US", {
-        hour: "numeric",
-        minute: "2-digit",
-        hour12: true,
-      }),
-      clientName: clientName.trim(),
-      barber: barber.name,
-      service: service.name,
-      cost: service.price,
-      status: "queued",
-      branch: isClient && user.branch ? user.branch : newBarber.branch || user.branch || "Main Branch",
-    };
-
-    setTransactions((currentTransactions) => [newTransaction, ...currentTransactions]);
-    setPosModalOpen(false);
-    resetPosForm();
+    setIsSubmittingQueue(true);
+    try {
+      const branchId = queueBranchId
+        ? queueBranchId
+        : selectedBranch === "all"
+          ? null
+          : resolveBranchId(selectedBranch);
+      const created = await createTransaction({
+        barberId: barber.id,
+        serviceId: service.id,
+        clientName: clientName.trim(),
+        status: "queued",
+        branchId,
+      });
+      setTransactions((currentTransactions) => [created, ...currentTransactions]);
+      setPosModalOpen(false);
+      resetPosForm();
+    } catch {
+      // ignore
+    } finally {
+      setIsSubmittingQueue(false);
+    }
   };
 
-  const handleDeleteTransaction = (id: string) => {
+  const handleDeleteTransaction = async (id: string) => {
+    await deleteTransactionApi(id);
     setTransactions((currentTransactions) => currentTransactions.filter((transaction) => transaction.id !== id));
+  };
+
+  const handleCompleteTransaction = async (id: string) => {
+    try {
+      await completeTransaction(id);
+      setTransactions((currentTransactions) =>
+        currentTransactions.map((transaction) =>
+          transaction.id === id ? { ...transaction, status: "completed" } : transaction
+        )
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to complete transaction");
+    }
+  };
+
+  const confirmDeleteQueue = async () => {
+    if (!pendingDeleteId) return;
+    await handleDeleteTransaction(pendingDeleteId);
+    setPendingDeleteId(null);
+    setDeleteQueueModalOpen(false);
   };
 
   const handleExportCSV = () => {
@@ -199,14 +327,12 @@ export default function DashboardPage() {
     <div className="min-h-screen bg-[var(--page-bg)]">
       <DashboardTopBar
         activeTab="overview"
-        branch={user.branch}
+        branch={user.branch ?? undefined}
         canManageUsers={isAdmin}
         canViewExpenses={canViewExpenses}
         mobileMenuOpen={mobileMenuOpen}
         role={user.role}
         onLogout={logout}
-        onOpenBarberModal={() => setAddBarberModalOpen(true)}
-        onOpenUserModal={() => setAddUserModalOpen(true)}
         onSetMobileMenuOpen={setMobileMenuOpen}
       />
 
@@ -217,12 +343,6 @@ export default function DashboardPage() {
             <h1 className="mt-2 text-3xl font-semibold text-[var(--text)] md:text-4xl">Operations center</h1>
             <p className="mt-2 max-w-2xl text-sm text-[var(--muted)]">{pageDescription}</p>
           </div>
-          {canViewExpenses && (
-            <Button variant="outline" size="md" onClick={() => setExpensesModalOpen(true)}>
-              <Receipt className="h-4 w-4" />
-              Log Monthly Expenses
-            </Button>
-          )}
         </div>
 
         <DashboardOverview
@@ -233,9 +353,14 @@ export default function DashboardPage() {
           filteredTransactions={filteredTransactions}
           formatCurrency={formatCurrency}
           formatDate={formatDate}
-          isAdmin={isAdmin}
-          isClient={isClient}
-          onDeleteTransaction={handleDeleteTransaction}
+          isCashier={isCashier}
+          isBranchLocked={isBranchLocked}
+          lockedBranchId={lockedBranchId}
+          onCompleteTransaction={handleCompleteTransaction}
+          onDeleteTransaction={(id) => {
+            setPendingDeleteId(id);
+            setDeleteQueueModalOpen(true);
+          }}
           onEndDateChange={(value) => {
             setEndDate(value);
             setCurrentPage(1);
@@ -244,10 +369,6 @@ export default function DashboardPage() {
           onOpenQueueModal={() => setPosModalOpen(true)}
           onPageChange={setCurrentPage}
           onRevenueChartTypeChange={setRevenueChartType}
-          onSearchTermChange={(value) => {
-            setSearchTerm(value);
-            setCurrentPage(1);
-          }}
           onSelectedBranchChange={(value) => {
             setSelectedBranch(value);
             setCurrentPage(1);
@@ -261,7 +382,6 @@ export default function DashboardPage() {
           queueCount={queueCount}
           revenueChartData={revenueChartData}
           revenueChartType={revenueChartType}
-          searchTerm={searchTerm}
           selectedBranch={effectiveSelectedBranch}
           startDate={startDate}
           todayRevenue={todayRevenue}
@@ -300,15 +420,18 @@ export default function DashboardPage() {
                 <Button
                   variant="primary"
                   onClick={() => setPosStep((current) => current + 1)}
-                  disabled={(posStep === 1 && !selectedBarber) || (posStep === 2 && !selectedService)}
+                  disabled={
+                    (posStep === 1 && (!selectedBarber || !selectedBarberAllowed)) ||
+                    (posStep === 2 && (!selectedService || !selectedServiceAllowed))
+                  }
                 >
                   Next
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               ) : (
-                <Button variant="primary" onClick={handleAddToQueue} disabled={!clientName.trim()}>
+                <Button variant="primary" onClick={handleAddToQueue} disabled={isSubmittingQueue || !clientName.trim() || !selectedBarberAllowed || !selectedServiceAllowed}>
                   <CheckCircle className="h-4 w-4" />
-                  Add to Queue
+                  {isSubmittingQueue ? "Adding..." : "Add to Queue"}
                 </Button>
               )}
             </div>
@@ -318,25 +441,30 @@ export default function DashboardPage() {
         {posStep === 1 && (
           <div className="space-y-4">
             <h3 className="text-center text-base font-semibold text-[var(--text)]">Step 1: Choose a barber</h3>
-            <div className="grid grid-cols-2 gap-3">
-              {barbers.map((barber) => (
-                <button
-                  key={barber.id}
-                  type="button"
-                  onClick={() => setSelectedBarber(barber.id)}
-                  className={`rounded-2xl border-2 p-4 text-left transition ${
-                    selectedBarber === barber.id
-                      ? "border-[var(--brand)] bg-[var(--primary-light)]"
-                      : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
-                  }`}
-                >
-                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)] text-sm font-semibold text-[var(--text)]">
-                    {barber.avatar}
-                  </div>
-                  <div className="font-semibold text-[var(--text)]">{barber.name}</div>
-                  <div className="text-xs text-[var(--muted)]">{barber.specialty}</div>
-                </button>
-              ))}
+            <div className="grid grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-2">
+              {queueBarbers.map((barber) => {
+                const branchName = getItemBranchName(barber.branchId, barber.branch);
+
+                return (
+                  <button
+                    key={barber.id}
+                    type="button"
+                    onClick={() => setSelectedBarber(barber.id)}
+                    className={`rounded-2xl border-2 p-4 text-left transition ${
+                      selectedBarber === barber.id
+                        ? "border-[var(--brand)] bg-[var(--primary-light)]"
+                        : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
+                    }`}
+                  >
+                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)] text-sm font-semibold text-[var(--text)]">
+                      {barber.avatar}
+                    </div>
+                    <div className="font-semibold text-[var(--text)]">{barber.name}</div>
+                    <div className="text-xs text-[var(--muted)]">{barber.specialty}</div>
+                    <div className="mt-2 text-xs font-medium text-[var(--muted)]">Branch: {branchName}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -344,24 +472,29 @@ export default function DashboardPage() {
         {posStep === 2 && (
           <div className="space-y-3">
             <h3 className="text-center text-base font-semibold text-[var(--text)]">Step 2: Choose a service</h3>
-            {SERVICES.map((service) => (
-              <button
-                key={service.id}
-                type="button"
-                onClick={() => setSelectedService(service.id)}
-                className={`flex w-full items-center justify-between rounded-2xl border-2 p-4 transition ${
-                  selectedService === service.id
-                    ? "border-[var(--brand)] bg-[var(--primary-light)]"
-                    : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
-                }`}
-              >
-                <div className="text-left">
-                  <div className="font-semibold text-[var(--text)]">{service.name}</div>
-                  <div className="text-xs text-[var(--muted)]">Duration: {service.duration}</div>
-                </div>
-                <div className="font-bold text-[var(--text)]">{formatCurrency(service.price)}</div>
-              </button>
-            ))}
+            {queueServices.map((service) => {
+              const branchName = getItemBranchName(service.branchId, service.branch);
+
+              return (
+                <button
+                  key={service.id}
+                  type="button"
+                  onClick={() => setSelectedService(service.id)}
+                  className={`flex w-full items-center justify-between rounded-2xl border-2 p-4 transition ${
+                    selectedService === service.id
+                      ? "border-[var(--brand)] bg-[var(--primary-light)]"
+                      : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
+                  }`}
+                >
+                  <div className="text-left">
+                    <div className="font-semibold text-[var(--text)]">{service.name}</div>
+                    <div className="text-xs text-[var(--muted)]">Duration: {service.duration}</div>
+                    <div className="mt-1 text-xs font-medium text-[var(--muted)]">Branch: {branchName}</div>
+                  </div>
+                  <div className="font-bold text-[var(--text)]">{formatCurrency(service.price)}</div>
+                </button>
+              );
+            })}
           </div>
         )}
 
@@ -373,7 +506,7 @@ export default function DashboardPage() {
                 Barber: <span className="font-semibold text-[var(--text)]">{barbers.find((item) => item.id === selectedBarber)?.name}</span>
               </p>
               <p className="text-sm text-[var(--muted)]">
-                Service: <span className="font-semibold text-[var(--text)]">{SERVICES.find((item) => item.id === selectedService)?.name}</span>
+                Service: <span className="font-semibold text-[var(--text)]">{services.find((item) => item.id === selectedService)?.name}</span>
               </p>
             </div>
             <Input
@@ -398,7 +531,7 @@ export default function DashboardPage() {
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--muted)]">Service</span>
-                <span className="font-semibold text-[var(--text)]">{SERVICES.find((item) => item.id === selectedService)?.name}</span>
+                <span className="font-semibold text-[var(--text)]">{services.find((item) => item.id === selectedService)?.name}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--muted)]">Client</span>
@@ -407,7 +540,7 @@ export default function DashboardPage() {
               <div className="flex justify-between border-t border-[var(--border)] pt-3">
                 <span className="font-medium text-[var(--text)]">Total Cost</span>
                 <span className="font-bold text-[var(--brand)]">
-                  {formatCurrency(SERVICES.find((item) => item.id === selectedService)?.price ?? 0)}
+                  {formatCurrency(services.find((item) => item.id === selectedService)?.price ?? 0)}
                 </span>
               </div>
             </Card>
@@ -416,268 +549,33 @@ export default function DashboardPage() {
       </Modal>
 
       <Modal
-        isOpen={expensesModalOpen}
-        onClose={() => setExpensesModalOpen(false)}
-        title="Monthly Expenses"
-        footer={
-          <div className="flex w-full gap-2">
-            <Button variant="outline" onClick={() => setExpensesModalOpen(false)} className="flex-1">
-              Close
-            </Button>
-            <Button variant="primary" onClick={() => setExpensesModalOpen(false)} className="flex-1">
-              Saved
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <Input type="month" label="Month" defaultValue={todayKey.slice(0, 7)} />
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-                <Zap className="mr-1 inline h-4 w-4" />
-                Electricity
-              </label>
-              <Input type="number" placeholder="0" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-                <Droplet className="mr-1 inline h-4 w-4" />
-                Water
-              </label>
-              <Input type="number" placeholder="0" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-                <Building className="mr-1 inline h-4 w-4" />
-                Rent
-              </label>
-              <Input type="number" placeholder="0" />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-                <Receipt className="mr-1 inline h-4 w-4" />
-                Other
-              </label>
-              <Input type="number" placeholder="0" />
-            </div>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={addBarberModalOpen}
+        isOpen={deleteQueueModalOpen}
         onClose={() => {
-          setAddBarberModalOpen(false);
-          setNewBarber({ name: "", specialty: "Haircut", branch: "Main Branch" });
+          setDeleteQueueModalOpen(false);
+          setPendingDeleteId(null);
         }}
-        title="Add Barber"
+        title="Delete queue entry"
         footer={
           <div className="flex w-full gap-2">
             <Button
               variant="outline"
               onClick={() => {
-                setAddBarberModalOpen(false);
-                setNewBarber({ name: "", specialty: "Haircut", branch: "Main Branch" });
+                setDeleteQueueModalOpen(false);
+                setPendingDeleteId(null);
               }}
               className="flex-1"
             >
               Cancel
             </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                if (!newBarber.name.trim()) {
-                  return;
-                }
-
-                setBarbers((currentBarbers) => [
-                  ...currentBarbers,
-                  {
-                    id: `barber_${currentBarbers.length + 1}`,
-                    name: newBarber.name.trim(),
-                    avatar: newBarber.name.trim().slice(0, 2).toUpperCase(),
-                    specialty: newBarber.specialty,
-                    branch: newBarber.branch,
-                  },
-                ]);
-                setNewBarber({ name: "", specialty: "Haircut", branch: "Main Branch" });
-                setAddBarberModalOpen(false);
-              }}
-              className="flex-1"
-            >
-              Add Barber
+            <Button variant="error" onClick={confirmDeleteQueue} className="flex-1">
+              Delete
             </Button>
           </div>
         }
       >
-        <div className="space-y-4">
-          <Input
-            type="text"
-            label="Barber Name"
-            placeholder="Enter barber name"
-            value={newBarber.name}
-            onChange={(event) => setNewBarber((current) => ({ ...current, name: event.target.value }))}
-            icon={<User className="h-4 w-4" />}
-          />
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-              <Scissors className="mr-1 inline h-4 w-4" />
-              Specialty
-            </label>
-            <select
-              value={newBarber.specialty}
-              onChange={(event) =>
-                setNewBarber((current) => ({
-                  ...current,
-                  specialty: event.target.value as typeof BARBER_SPECIALTIES[number],
-                }))
-              }
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-4 py-2.5 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
-            >
-              {BARBER_SPECIALTIES.map((specialty) => (
-                <option key={specialty} value={specialty}>
-                  {specialty}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-              <Building className="mr-1 inline h-4 w-4" />
-              Branch Location
-            </label>
-            <select
-              value={newBarber.branch}
-              onChange={(event) => setNewBarber((current) => ({ ...current, branch: event.target.value }))}
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-4 py-2.5 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
-            >
-              {branches.map((branch) => (
-                <option key={branch} value={branch}>
-                  {branch}
-                </option>
-              ))}
-            </select>
-          </div>
-        </div>
-      </Modal>
-
-      <Modal
-        isOpen={addUserModalOpen}
-        onClose={() => {
-          setAddUserModalOpen(false);
-          setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
-        }}
-        title="Manage Users"
-        footer={
-          <div className="flex w-full gap-2">
-            <Button
-              variant="outline"
-              onClick={() => {
-                setAddUserModalOpen(false);
-                setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
-              }}
-              className="flex-1"
-            >
-              Cancel
-            </Button>
-            <Button
-              variant="primary"
-              onClick={() => {
-                if (!newUser.username || !newUser.password) {
-                  return;
-                }
-
-                addUser({
-                  username: newUser.username,
-                  password: newUser.password,
-                  role: newUser.role,
-                  branch: newUser.branch,
-                });
-                setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
-              }}
-              className="flex-1"
-            >
-              Add User
-            </Button>
-          </div>
-        }
-      >
-        <div className="space-y-4">
-          <Input
-            type="text"
-            label="Username"
-            placeholder="Enter username"
-            value={newUser.username}
-            onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))}
-            icon={<User className="h-4 w-4" />}
-          />
-          <Input
-            type="password"
-            label="Password"
-            placeholder="Enter password"
-            value={newUser.password}
-            onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))}
-            icon={<User className="h-4 w-4" />}
-          />
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-              <Users className="mr-1 inline h-4 w-4" />
-              Role
-            </label>
-            <select
-              value={newUser.role}
-              onChange={(event) =>
-                setNewUser((current) => ({
-                  ...current,
-                  role: event.target.value as "admin" | "cashier" | "client",
-                }))
-              }
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-4 py-2.5 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
-            >
-              <option value="admin">Admin</option>
-              <option value="cashier">Cashier</option>
-              <option value="client">Client</option>
-            </select>
-          </div>
-          <div>
-            <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
-              <Building className="mr-1 inline h-4 w-4" />
-              Branch Location
-            </label>
-            <select
-              value={newUser.branch}
-              onChange={(event) => setNewUser((current) => ({ ...current, branch: event.target.value }))}
-              className="w-full rounded-lg border border-[var(--border)] bg-white px-4 py-2.5 text-sm text-[var(--text)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
-            >
-              {branches.map((branch) => (
-                <option key={branch} value={branch}>
-                  {branch}
-                </option>
-              ))}
-            </select>
-          </div>
-          {users.length > 0 && (
-            <div className="mt-6 border-t border-[var(--border)] pt-4">
-              <h4 className="mb-3 text-sm font-semibold text-[var(--text)]">Existing Users</h4>
-              <div className="max-h-40 space-y-2 overflow-y-auto">
-                {users.map((storedUser) => (
-                  <div key={storedUser.id} className="flex items-center justify-between rounded-xl bg-[var(--surface-alt)] p-3">
-                    <div>
-                      <p className="text-sm font-medium text-[var(--text)]">{storedUser.username}</p>
-                      <p className="text-xs text-[var(--muted)]">
-                        {storedUser.role} · {storedUser.branch ?? "No branch"}
-                      </p>
-                    </div>
-                    <Button variant="ghost" size="sm" onClick={() => deleteUser(storedUser.username)}>
-                      Remove
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
+        <p className="text-sm text-[var(--muted)]">
+          This will permanently remove the queue entry from the transaction history.
+        </p>
       </Modal>
     </div>
   );

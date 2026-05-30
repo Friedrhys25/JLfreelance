@@ -1,22 +1,21 @@
 "use client";
 
-import Link from "next/link";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Building, LogOut, Menu, Plus, Receipt, Scissors, Settings, TrendingUp, Users, X } from "lucide-react";
+import { Building, LogOut, Menu, Receipt, Scissors, Settings, TrendingUp, X } from "lucide-react";
 import { Button } from "@/app/components/Button";
+import { Modal } from "@/app/components/Modal";
 import type { DashboardTab } from "@/app/dashboard/types";
 
 interface DashboardTopBarProps {
   activeTab?: DashboardTab | null;
-  activeShortcut?: "services" | "new-service" | "settings";
+  activeShortcut?: "settings";
   canViewExpenses: boolean;
   canManageUsers: boolean;
   mobileMenuOpen: boolean;
   branch?: string;
   role?: string | null;
   onLogout: () => void;
-  onOpenBarberModal: () => void;
-  onOpenUserModal: () => void;
   onSetMobileMenuOpen: (isOpen: boolean) => void;
 }
 
@@ -29,11 +28,11 @@ export function DashboardTopBar({
   branch,
   role,
   onLogout,
-  onOpenBarberModal,
-  onOpenUserModal,
   onSetMobileMenuOpen,
 }: DashboardTopBarProps) {
   const router = useRouter();
+  const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const closeMobileMenu = () => onSetMobileMenuOpen(false);
 
   const openTab = (tab: DashboardTab) => {
@@ -51,7 +50,7 @@ export function DashboardTopBar({
             </div>
             <div className="hidden sm:block">
               <span className="block text-lg font-semibold text-[var(--text)]">
-                Barbershop POS
+                IDENTITY
               </span>
               <span className="text-xs capitalize text-[var(--muted)]">
                 {role ?? "guest"} view
@@ -84,38 +83,16 @@ export function DashboardTopBar({
                 Expenses
               </Button>
             )}
-            <Link href="/dashboard/services">
-              <Button variant={activeShortcut === "services" ? "primary" : "outline"} size="sm">
-                <Scissors className="h-4 w-4" />
-                Services
-              </Button>
-            </Link>
-            <Link href="/dashboard/services/new">
-              <Button variant={activeShortcut === "new-service" ? "primary" : "outline"} size="sm">
-                <Plus className="h-4 w-4" />
-                New Service
-              </Button>
-            </Link>
-            <Link href="/dashboard/settings">
-              <Button variant={activeShortcut === "settings" ? "primary" : "outline"} size="sm">
-                <Settings className="h-4 w-4" />
-                Settings
-              </Button>
-            </Link>
-            {canViewExpenses && (
-              <Button variant="outline" size="sm" onClick={onOpenBarberModal}>
-                <Plus className="h-4 w-4" />
-                Add Barber
-              </Button>
-            )}
-            {canManageUsers && (
-              <Button variant="outline" size="sm" onClick={onOpenUserModal}>
-                <Users className="h-4 w-4" />
-                Users
-              </Button>
-            )}
+            <Button
+              variant={activeShortcut === "settings" ? "primary" : "outline"}
+              size="sm"
+              onClick={() => router.push("/dashboard/settings")}
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
             <div className="h-6 w-px bg-[var(--border)]" />
-            <Button variant="ghost" size="sm" onClick={onLogout}>
+            <Button variant="ghost" size="sm" onClick={() => setLogoutConfirmOpen(true)}>
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -151,59 +128,61 @@ export function DashboardTopBar({
                 Expenses
               </Button>
             )}
-            <Link href="/dashboard/services" onClick={closeMobileMenu}>
-              <Button variant={activeShortcut === "services" ? "primary" : "outline"} size="sm" fullWidth>
-                <Scissors className="h-4 w-4" />
-                Services
-              </Button>
-            </Link>
-            <Link href="/dashboard/services/new" onClick={closeMobileMenu}>
-              <Button variant={activeShortcut === "new-service" ? "primary" : "outline"} size="sm" fullWidth>
-                <Plus className="h-4 w-4" />
-                New Service
-              </Button>
-            </Link>
-            <Link href="/dashboard/settings" onClick={closeMobileMenu}>
-              <Button variant={activeShortcut === "settings" ? "primary" : "outline"} size="sm" fullWidth>
-                <Settings className="h-4 w-4" />
-                Settings
-              </Button>
-            </Link>
-            {canViewExpenses && (
-              <Button
-                variant="outline"
-                size="sm"
-                fullWidth
-                onClick={() => {
-                  onOpenBarberModal();
-                  closeMobileMenu();
-                }}
-              >
-                <Plus className="h-4 w-4" />
-                Add Barber
-              </Button>
-            )}
-            {canManageUsers && (
-              <Button
-                variant="outline"
-                size="sm"
-                fullWidth
-                onClick={() => {
-                  onOpenUserModal();
-                  closeMobileMenu();
-                }}
-              >
-                <Users className="h-4 w-4" />
-                Users
-              </Button>
-            )}
-            <Button variant="error" size="sm" fullWidth onClick={onLogout}>
+            <Button
+              variant={activeShortcut === "settings" ? "primary" : "outline"}
+              size="sm"
+              fullWidth
+              onClick={() => {
+                router.push("/dashboard/settings");
+                closeMobileMenu();
+              }}
+            >
+              <Settings className="h-4 w-4" />
+              Settings
+            </Button>
+            <Button variant="error" size="sm" fullWidth onClick={() => setLogoutConfirmOpen(true)}>
               <LogOut className="h-4 w-4" />
               Logout
             </Button>
           </div>
         )}
       </div>
+
+      <Modal
+        isOpen={logoutConfirmOpen}
+        onClose={() => setLogoutConfirmOpen(false)}
+        title="Logout"
+        footer={
+          <div className="flex gap-3">
+            <Button
+              variant="outline"
+              onClick={() => setLogoutConfirmOpen(false)}
+              disabled={isLoggingOut}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="error"
+              onClick={async () => {
+                setIsLoggingOut(true);
+                try {
+                  await Promise.resolve(onLogout());
+                } finally {
+                  setIsLoggingOut(false);
+                  setLogoutConfirmOpen(false);
+                }
+              }}
+              disabled={isLoggingOut}
+              className="flex-1"
+            >
+              {isLoggingOut ? "Logging out..." : "Logout"}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-(--text)">Are you sure you want to logout?</p>
+      </Modal>
     </nav>
   );
 }

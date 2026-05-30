@@ -2,32 +2,81 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ArrowLeft, Clock, DollarSign, Percent, Save, Scissors, Settings } from "lucide-react";
 import { Badge } from "@/app/components/Badge";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
 import { Input } from "@/app/components/Input";
-
-const mockService = {
-  id: "1",
-  name: "Haircut",
-  description: "Professional haircut service including consultation, wash, cut, and styling.",
-  price: "35.00",
-  taxRate: "10",
-  duration: "30 min",
-  status: "active" as "active" | "inactive",
-};
+import { getService, updateService } from "@/lib/api";
 
 export default function EditServicePage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
-  const [formData, setFormData] = useState(mockService);
+  const [formData, setFormData] = useState({
+    id: "",
+    name: "",
+    description: "",
+    price: "0.00",
+    taxRate: "0",
+    duration: "",
+    status: "active" as "active" | "inactive",
+  });
+  const [isLoading, setIsLoading] = useState(true);
 
-  const handleSubmit = (event: React.FormEvent) => {
+  useEffect(() => {
+    let isMounted = true;
+    const loadService = async () => {
+      try {
+        const data = await getService(params.id);
+        if (!isMounted) return;
+        setFormData({
+          id: data.id,
+          name: data.name,
+          description: data.description,
+          price: data.price.toFixed(2),
+          taxRate: data.taxRate.toString(),
+          duration: data.duration,
+          status: data.status,
+        });
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+
+    if (params.id) {
+      loadService();
+    }
+
+    return () => {
+      isMounted = false;
+    };
+  }, [params.id]);
+
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
+    await updateService(params.id, {
+      name: formData.name,
+      description: formData.description,
+      price: Number.parseFloat(formData.price) || 0,
+      duration: formData.duration,
+      taxRate: Number.parseFloat(formData.taxRate) || 0,
+      status: formData.status,
+    });
     router.push(`/dashboard/services/${params.id}`);
   };
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-[var(--page-bg)]">
+        <main className="container mx-auto px-4 py-8">
+          <Card className="p-6">
+            <p className="text-sm text-[var(--muted)]">Loading service...</p>
+          </Card>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--page-bg)]">

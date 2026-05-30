@@ -2,21 +2,37 @@
 
 import React, { createContext, useContext, useEffect, useReducer } from "react";
 import { useRouter } from "next/navigation";
+import {
+  clearStoredToken,
+  createBranch,
+  createUser,
+  deleteUser as deleteUserApi,
+  getMe,
+  getStoredToken,
+  listBranches,
+  listUsers,
+  login as loginApi,
+  setStoredToken,
+  type ApiBranch,
+  type ApiUser,
+} from "@/lib/api";
 
 type Role = "admin" | "cashier" | "client" | null;
 
 interface User {
+  id?: string;
   username: string;
   role: Role;
-  branch?: string;
+  branch?: string | null;
+  branchId?: string | null;
 }
 
 interface StoredUser {
   id: string;
   username: string;
-  password: string;
   role: Exclude<Role, null>;
-  branch?: string;
+  branch?: string | null;
+  branchId?: string | null;
   createdAt: string;
 }
 
@@ -29,50 +45,42 @@ interface AuthContextType {
   isClient: boolean;
   isAuthenticated: boolean;
   users: StoredUser[];
-  addUser: (user: Omit<StoredUser, "id" | "createdAt">) => void;
-  deleteUser: (username: string) => void;
-  branches: string[];
+  addUser: (user: { username: string; password: string; role: Exclude<Role, null>; branchId?: string | null }) => Promise<void>;
+  deleteUser: (userId: string) => Promise<void>;
+  addBranch: (name: string) => Promise<void>;
+  branches: ApiBranch[];
 }
 
 interface AuthState {
   user: User;
   users: StoredUser[];
+  branches: ApiBranch[];
   isLoading: boolean;
 }
 
 type AuthAction =
   | { type: "hydrate"; payload: Omit<AuthState, "isLoading"> }
+  | { type: "setMeta"; payload: { users: StoredUser[]; branches: ApiBranch[] } }
   | { type: "login"; payload: User }
   | { type: "logout" }
   | { type: "addUser"; payload: StoredUser }
-  | { type: "deleteUser"; payload: string };
+  | { type: "deleteUser"; payload: string }
+  | { type: "addBranch"; payload: ApiBranch };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-const VALID_CREDENTIALS = {
-  admin: { username: "admin", password: "admin", role: "admin" as Role, branch: "Head Office" },
-};
-
-const DEFAULT_BRANCHES = ["Main Branch", "Downtown Branch", "Westside Branch"];
-
 const EMPTY_USER: User = {
+  id: undefined,
   username: "",
   role: null,
-  branch: undefined,
-};
-
-const DEFAULT_CASHIER: StoredUser = {
-  id: "cashier_001",
-  username: "cashier",
-  password: "cashier",
-  role: "cashier",
-  branch: "Main Branch",
-  createdAt: "2026-01-01T00:00:00.000Z",
+  branch: null,
+  branchId: null,
 };
 
 const initialAuthState: AuthState = {
   user: EMPTY_USER,
   users: [],
+  branches: [],
   isLoading: true,
 };
 
@@ -88,10 +96,18 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         ...state,
         user: action.payload,
       };
+    case "setMeta":
+      return {
+        ...state,
+        users: action.payload.users,
+        branches: action.payload.branches,
+      };
     case "logout":
       return {
         ...state,
         user: EMPTY_USER,
+        users: [],
+        branches: [],
       };
     case "addUser":
       return {
@@ -101,52 +117,43 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
     case "deleteUser":
       return {
         ...state,
-        users: state.users.filter((user) => user.username !== action.payload),
+        users: state.users.filter((user) => user.id !== action.payload),
       };
+    case "addBranch": {
+      const branches = [...state.branches, action.payload].sort((a, b) => a.name.localeCompare(b.name));
+      return {
+        ...state,
+        branches,
+      };
+    }
     default:
       return state;
   }
 }
 
-function getHydratedState(): Omit<AuthState, "isLoading"> {
-  if (typeof window === "undefined") {
-    return {
-      user: EMPTY_USER,
-      users: [],
-    };
-  }
-
-  const storedUser = window.localStorage.getItem("barbershop_user");
-  const storedUsers = window.localStorage.getItem("barbershop_users");
-  const storedCashiers = window.localStorage.getItem("barbershop_cashiers");
-
-  if (storedUsers) {
-    return {
-      user: storedUser ? JSON.parse(storedUser) : EMPTY_USER,
-      users: JSON.parse(storedUsers),
-    };
-  }
-
-  if (storedCashiers) {
-    const migratedUsers: StoredUser[] = JSON.parse(storedCashiers).map((cashier: StoredUser) => ({
-      ...cashier,
-      role: "cashier",
-    }));
-
-    window.localStorage.setItem("barbershop_users", JSON.stringify(migratedUsers));
-
-    return {
-      user: storedUser ? JSON.parse(storedUser) : EMPTY_USER,
-      users: migratedUsers,
-    };
-  }
-
-  window.localStorage.setItem("barbershop_users", JSON.stringify([DEFAULT_CASHIER]));
-
+function mapUser(user: ApiUser): User {
   return {
-    user: storedUser ? JSON.parse(storedUser) : EMPTY_USER,
-    users: [DEFAULT_CASHIER],
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    branch: user.branch ?? null,
+    branchId: user.branchId ?? null,
   };
+}
+
+function mapStoredUsers(users: ApiUser[]): StoredUser[] {
+  return users.map((user) => ({
+    id: user.id,
+    username: user.username,
+    role: user.role,
+    branch: user.branch ?? null,
+    branchId: user.branchId ?? null,
+    createdAt: user.createdAt ?? new Date().toISOString(),
+  }));
+}
+
+function mapBranches(branches: ApiBranch[]) {
+  return branches;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -154,60 +161,92 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   useEffect(() => {
-    dispatch({ type: "hydrate", payload: getHydratedState() });
+    let isMounted = true;
+
+    const hydrate = async () => {
+      const token = getStoredToken();
+      if (!token) {
+        if (isMounted) {
+          dispatch({ type: "hydrate", payload: { user: EMPTY_USER, users: [], branches: [] } });
+        }
+        return;
+      }
+
+      try {
+        const me = await getMe();
+        const [branches, users] = await Promise.all([
+          listBranches(),
+          me.role === "admin" ? listUsers() : Promise.resolve([] as ApiUser[]),
+        ]);
+
+        if (isMounted) {
+          dispatch({
+            type: "hydrate",
+            payload: {
+              user: mapUser(me),
+              users: mapStoredUsers(users),
+              branches: mapBranches(branches),
+            },
+          });
+        }
+      } catch {
+        clearStoredToken();
+        if (isMounted) {
+          dispatch({ type: "hydrate", payload: { user: EMPTY_USER, users: [], branches: [] } });
+        }
+      }
+    };
+
+    hydrate();
+    return () => {
+      isMounted = false;
+    };
   }, []);
 
   const login = async (username: string, password: string): Promise<boolean> => {
-    if (username === VALID_CREDENTIALS.admin.username && password === VALID_CREDENTIALS.admin.password) {
-      const userData: User = {
-        username: VALID_CREDENTIALS.admin.username,
-        role: VALID_CREDENTIALS.admin.role,
-        branch: VALID_CREDENTIALS.admin.branch,
-      };
-      dispatch({ type: "login", payload: userData });
-      window.localStorage.setItem("barbershop_user", JSON.stringify(userData));
+    try {
+      const { token, user } = await loginApi(username, password);
+      setStoredToken(token);
+      const [branches, users] = await Promise.all([
+        listBranches(),
+        user.role === "admin" ? listUsers() : Promise.resolve([] as ApiUser[]),
+      ]);
+      dispatch({ type: "login", payload: mapUser(user) });
+      dispatch({ type: "setMeta", payload: { users: mapStoredUsers(users), branches: mapBranches(branches) } });
       router.push("/dashboard");
       return true;
-    }
-
-    const matchedUser = state.users.find((user) => user.username === username && user.password === password);
-    if (!matchedUser) {
+    } catch {
       return false;
     }
-
-    const userData: User = {
-      username: matchedUser.username,
-      role: matchedUser.role,
-      branch: matchedUser.branch,
-    };
-
-    dispatch({ type: "login", payload: userData });
-    window.localStorage.setItem("barbershop_user", JSON.stringify(userData));
-    router.push("/dashboard");
-    return true;
   };
 
   const logout = () => {
     dispatch({ type: "logout" });
-    window.localStorage.removeItem("barbershop_user");
+    clearStoredToken();
     router.push("/login");
   };
 
-  const addUser = (userData: Omit<StoredUser, "id" | "createdAt">) => {
-    const newUser: StoredUser = {
-      ...userData,
-      id: `user_${state.users.length + 1}`,
-      createdAt: new Date().toISOString(),
-    };
-    const updatedUsers = [...state.users, newUser];
-    dispatch({ type: "addUser", payload: newUser });
-    window.localStorage.setItem("barbershop_users", JSON.stringify(updatedUsers));
+  const addUser = async (userData: { username: string; password: string; role: Exclude<Role, null>; branchId?: string | null }) => {
+    const created = await createUser(userData);
+    dispatch({ type: "addUser", payload: mapStoredUsers([created])[0] });
   };
 
-  const deleteUser = (username: string) => {
-    const updatedUsers = state.users.filter((user) => user.username !== username);
-    dispatch({ type: "deleteUser", payload: username });
-    window.localStorage.setItem("barbershop_users", JSON.stringify(updatedUsers));
+  const deleteUser = async (userId: string) => {
+    try {
+      await deleteUserApi(userId);
+      dispatch({ type: "deleteUser", payload: userId });
+    } catch {
+      return;
+    }
+  };
+
+  const addBranch = async (name: string) => {
+    try {
+      const created = await createBranch({ name });
+      dispatch({ type: "addBranch", payload: created });
+    } catch {
+      return;
+    }
   };
 
   const value = {
@@ -221,7 +260,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     users: state.users,
     addUser,
     deleteUser,
-    branches: DEFAULT_BRANCHES,
+    addBranch,
+    branches: state.branches,
   };
 
   if (state.isLoading) {
