@@ -79,6 +79,19 @@ export default function DashboardPage() {
   const effectiveSelectedBranch = isBranchLocked ? lockedBranchName ?? "" : selectedBranch;
   const canViewExpenses = isAdmin || isClient;
   const selectedBranchId = effectiveSelectedBranch === "all" ? undefined : resolveBranchId(effectiveSelectedBranch) ?? undefined;
+  const mainBranch = branches.find((branch) => branch.name.toLowerCase() === "main branch")
+    ?? branches.find((branch) => branch.name.toLowerCase().includes("main"));
+  const adminQueueBranchName = user.branch ?? mainBranch?.name ?? "Main Branch";
+  const adminQueueBranchId = isAdmin ? resolveBranchId(adminQueueBranchName) : null;
+  const queueBranchId = isAdmin ? adminQueueBranchId : lockedBranchId;
+  const queueBranchName = isAdmin ? adminQueueBranchName : lockedBranchName;
+  const getItemBranchName = (branchId?: string | null, branchName?: string | null) =>
+    branchName ?? resolveBranchName(branchId) ?? "Main Branch";
+  const isInQueueBranch = (branchId?: string | null, branchName?: string | null) => {
+    if (!isAdmin) return true;
+    if (!queueBranchId) return false;
+    return branchId === queueBranchId || getItemBranchName(branchId, branchName) === queueBranchName;
+  };
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -86,7 +99,7 @@ export default function DashboardPage() {
 
     const loadServices = async () => {
       try {
-        const servicesData = await listServices({ branchId: selectedBranchId });
+        const servicesData = await listServices(isBranchLocked ? { branchId: selectedBranchId } : undefined);
         if (isMounted) setServices(servicesData);
       } catch {
         if (isMounted) setServices([]);
@@ -97,7 +110,7 @@ export default function DashboardPage() {
     return () => {
       isMounted = false;
     };
-  }, [isAuthenticated, selectedBranchId]);
+  }, [isAuthenticated, isBranchLocked, selectedBranchId]);
 
   const formatCurrency = (amount: number) =>
     new Intl.NumberFormat("en-PH", {
@@ -208,6 +221,13 @@ export default function DashboardPage() {
     setClientName("");
   };
 
+  const selectedBarberItem = barbers.find((item) => item.id === selectedBarber);
+  const selectedServiceItem = services.find((item) => item.id === selectedService);
+  const selectedBarberAllowed = selectedBarberItem ? isInQueueBranch(selectedBarberItem.branchId, selectedBarberItem.branch) : false;
+  const selectedServiceAllowed = selectedServiceItem ? isInQueueBranch(selectedServiceItem.branchId, selectedServiceItem.branch) : false;
+  const queueBarbers = isAdmin ? barbers.filter((barber) => isInQueueBranch(barber.branchId, barber.branch)) : barbers;
+  const queueServices = isAdmin ? services.filter((service) => isInQueueBranch(service.branchId, service.branch)) : services;
+
   const handleAddToQueue = async () => {
     if (!selectedBarber || !selectedService || !clientName.trim()) {
       return;
@@ -216,13 +236,13 @@ export default function DashboardPage() {
     const barber = barbers.find((item) => item.id === selectedBarber);
     const service = services.find((item) => item.id === selectedService);
 
-    if (!barber || !service) {
+    if (!barber || !service || !isInQueueBranch(barber.branchId, barber.branch) || !isInQueueBranch(service.branchId, service.branch)) {
       return;
     }
 
     try {
-      const branchId = isBranchLocked && lockedBranchId
-        ? lockedBranchId
+      const branchId = queueBranchId
+        ? queueBranchId
         : selectedBranch === "all"
           ? null
           : resolveBranchId(selectedBranch);
@@ -380,13 +400,16 @@ export default function DashboardPage() {
                 <Button
                   variant="primary"
                   onClick={() => setPosStep((current) => current + 1)}
-                  disabled={(posStep === 1 && !selectedBarber) || (posStep === 2 && !selectedService)}
+                  disabled={
+                    (posStep === 1 && (!selectedBarber || !selectedBarberAllowed)) ||
+                    (posStep === 2 && (!selectedService || !selectedServiceAllowed))
+                  }
                 >
                   Next
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               ) : (
-                <Button variant="primary" onClick={handleAddToQueue} disabled={!clientName.trim()}>
+                <Button variant="primary" onClick={handleAddToQueue} disabled={!clientName.trim() || !selectedBarberAllowed || !selectedServiceAllowed}>
                   <CheckCircle className="h-4 w-4" />
                   Add to Queue
                 </Button>
@@ -399,24 +422,29 @@ export default function DashboardPage() {
           <div className="space-y-4">
             <h3 className="text-center text-base font-semibold text-[var(--text)]">Step 1: Choose a barber</h3>
             <div className="grid grid-cols-2 gap-3">
-              {barbers.map((barber) => (
-                <button
-                  key={barber.id}
-                  type="button"
-                  onClick={() => setSelectedBarber(barber.id)}
-                  className={`rounded-2xl border-2 p-4 text-left transition ${
-                    selectedBarber === barber.id
-                      ? "border-[var(--brand)] bg-[var(--primary-light)]"
-                      : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
-                  }`}
-                >
-                  <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)] text-sm font-semibold text-[var(--text)]">
-                    {barber.avatar}
-                  </div>
-                  <div className="font-semibold text-[var(--text)]">{barber.name}</div>
-                  <div className="text-xs text-[var(--muted)]">{barber.specialty}</div>
-                </button>
-              ))}
+              {queueBarbers.map((barber) => {
+                const branchName = getItemBranchName(barber.branchId, barber.branch);
+
+                return (
+                  <button
+                    key={barber.id}
+                    type="button"
+                    onClick={() => setSelectedBarber(barber.id)}
+                    className={`rounded-2xl border-2 p-4 text-left transition ${
+                      selectedBarber === barber.id
+                        ? "border-[var(--brand)] bg-[var(--primary-light)]"
+                        : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
+                    }`}
+                  >
+                    <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)] text-sm font-semibold text-[var(--text)]">
+                      {barber.avatar}
+                    </div>
+                    <div className="font-semibold text-[var(--text)]">{barber.name}</div>
+                    <div className="text-xs text-[var(--muted)]">{barber.specialty}</div>
+                    <div className="mt-2 text-xs font-medium text-[var(--muted)]">Branch: {branchName}</div>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -424,24 +452,29 @@ export default function DashboardPage() {
         {posStep === 2 && (
           <div className="space-y-3">
             <h3 className="text-center text-base font-semibold text-[var(--text)]">Step 2: Choose a service</h3>
-            {services.map((service) => (
-              <button
-                key={service.id}
-                type="button"
-                onClick={() => setSelectedService(service.id)}
-                className={`flex w-full items-center justify-between rounded-2xl border-2 p-4 transition ${
-                  selectedService === service.id
-                    ? "border-[var(--brand)] bg-[var(--primary-light)]"
-                    : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
-                }`}
-              >
-                <div className="text-left">
-                  <div className="font-semibold text-[var(--text)]">{service.name}</div>
-                  <div className="text-xs text-[var(--muted)]">Duration: {service.duration}</div>
-                </div>
-                <div className="font-bold text-[var(--text)]">{formatCurrency(service.price)}</div>
-              </button>
-            ))}
+            {queueServices.map((service) => {
+              const branchName = getItemBranchName(service.branchId, service.branch);
+
+              return (
+                <button
+                  key={service.id}
+                  type="button"
+                  onClick={() => setSelectedService(service.id)}
+                  className={`flex w-full items-center justify-between rounded-2xl border-2 p-4 transition ${
+                    selectedService === service.id
+                      ? "border-[var(--brand)] bg-[var(--primary-light)]"
+                      : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
+                  }`}
+                >
+                  <div className="text-left">
+                    <div className="font-semibold text-[var(--text)]">{service.name}</div>
+                    <div className="text-xs text-[var(--muted)]">Duration: {service.duration}</div>
+                    <div className="mt-1 text-xs font-medium text-[var(--muted)]">Branch: {branchName}</div>
+                  </div>
+                  <div className="font-bold text-[var(--text)]">{formatCurrency(service.price)}</div>
+                </button>
+              );
+            })}
           </div>
         )}
 

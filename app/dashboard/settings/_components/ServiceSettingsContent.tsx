@@ -34,7 +34,7 @@ function mapService(apiService: ApiService): ServiceSetting {
 }
 
 export function ServiceSettingsContent() {
-  const { branches, isClient, user } = useAuth();
+  const { branches, isCashier, isClient, user } = useAuth();
   const [services, setServices] = useState<ServiceSetting[]>([]);
   const [splits, setSplits] = useState<Record<string, ServiceSplitSetting>>({});
   const [isDirty, setIsDirty] = useState(false);
@@ -52,6 +52,7 @@ export function ServiceSettingsContent() {
   const selectedBranchId = clientBranchId || selectedBranchIdState || branches[0]?.id || "";
   const visibleBranches = clientBranchId ? branches.filter((branch) => branch.id === clientBranchId) : branches;
   const branchSplit = getSplitForServiceName(splits, BRANCH_SPLIT_KEY);
+  const isCashierReadOnly = isCashier;
 
   useEffect(() => {
     let isMounted = true;
@@ -88,6 +89,7 @@ export function ServiceSettingsContent() {
   }, [isDirty]);
 
   const updateBranchSplit = (next: Partial<ServiceSplitSetting>) => {
+    if (isCashierReadOnly) return;
     setSplits((current) => ({
       ...current,
       [BRANCH_SPLIT_KEY]: normalizeSplit({ ...getSplitForServiceName(current, BRANCH_SPLIT_KEY), ...next }),
@@ -108,6 +110,7 @@ export function ServiceSettingsContent() {
   };
 
   const addService = async () => {
+    if (isCashierReadOnly) return;
     const name = newService.name.trim();
     if (!name) return;
 
@@ -136,6 +139,7 @@ export function ServiceSettingsContent() {
   };
 
   const handleSave = async () => {
+    if (isCashierReadOnly) return;
     if (!selectedBranchId) return;
     await saveServiceSplits([{ ...branchSplit, branchId: selectedBranchId }]);
     setIsDirty(false);
@@ -241,6 +245,7 @@ export function ServiceSettingsContent() {
                 value={branchSplit.shopPct}
                 min={0}
                 max={100}
+                disabled={isCashierReadOnly}
                 onChange={(event) => updateBranchSplit({ shopPct: Number(event.target.value) })}
                 icon={<Percent className="h-4 w-4" />}
               />
@@ -250,6 +255,7 @@ export function ServiceSettingsContent() {
                 value={branchSplit.barberPct}
                 min={0}
                 max={100}
+                disabled={isCashierReadOnly}
                 onChange={(event) => updateBranchSplit({ barberPct: Number(event.target.value) })}
                 icon={<Percent className="h-4 w-4" />}
               />
@@ -266,6 +272,7 @@ export function ServiceSettingsContent() {
                 label="Name"
                 placeholder="e.g. Beard Trim"
                 value={newService.name}
+                disabled={isCashierReadOnly}
                 onChange={(event) => setNewService((current) => ({ ...current, name: event.target.value }))}
                 icon={<Scissors className="h-4 w-4" />}
               />
@@ -274,6 +281,7 @@ export function ServiceSettingsContent() {
                 label="Price (PHP)"
                 placeholder="0"
                 value={newService.price}
+                disabled={isCashierReadOnly}
                 onChange={(event) => setNewService((current) => ({ ...current, price: event.target.value }))}
               />
               <div className="flex gap-2">
@@ -282,12 +290,14 @@ export function ServiceSettingsContent() {
                   label="Duration"
                   placeholder="30"
                   value={newService.durationValue}
+                  disabled={isCashierReadOnly}
                   onChange={(event) => setNewService((current) => ({ ...current, durationValue: event.target.value }))}
                 />
                 <div className="w-28">
                   <label className="text-xs font-medium text-(--muted)">Unit</label>
                   <select
                     value={newService.durationUnit}
+                    disabled={isCashierReadOnly}
                     onChange={(event) => setNewService((current) => ({ ...current, durationUnit: event.target.value }))}
                     className="mt-1 h-10 w-full rounded-lg border border-(--border) bg-white px-3 text-sm text-(--text)"
                   >
@@ -297,7 +307,7 @@ export function ServiceSettingsContent() {
                 </div>
               </div>
 
-              <Button variant="primary" fullWidth onClick={addService}>
+              <Button variant="primary" fullWidth onClick={addService} disabled={isCashierReadOnly}>
                 <Plus className="h-5 w-5" />
                 Add Service
               </Button>
@@ -314,7 +324,7 @@ export function ServiceSettingsContent() {
               size="lg"
               className="mt-5 w-full"
               onClick={handleSave}
-              disabled={!hasUnsavedChanges}
+              disabled={isCashierReadOnly || !hasUnsavedChanges}
             >
               <Save className="h-5 w-5" />
               Save Settings

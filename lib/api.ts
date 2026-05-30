@@ -135,6 +135,13 @@ export async function getMe() {
   return apiFetch<ApiUser>("/auth/me");
 }
 
+export async function changePassword(input: { currentPassword: string; newPassword: string }) {
+  return apiFetch<{ ok: true }>("/auth/password", {
+    method: "PUT",
+    body: JSON.stringify(input),
+  });
+}
+
 export async function listBranches() {
   return apiFetch<ApiBranch[]>("/branches");
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { BarChart, Bar, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Building, Calendar, Clock3, Download, Plus, Trash2, TrendingUp, Users } from "lucide-react";
+import { Building, Calendar, Clock3, Download, Plus, Trash2, TrendingUp } from "lucide-react";
 import { Badge } from "@/app/components/Badge";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
@@ -339,46 +339,6 @@ export function DashboardOverview({
           </div>
         )}
       </Card>
-
-      {!isCashier && (
-        <section className="grid gap-4 md:grid-cols-3">
-          <Card className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
-                <Users className="h-5 w-5 text-[var(--brand)]" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Barbers</p>
-                <p className="text-2xl font-semibold text-[var(--text)]">{barbers.length}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
-                <Building className="h-5 w-5 text-[var(--brand)]" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Branches</p>
-                <p className="text-2xl font-semibold text-[var(--text)]">{branches.length}</p>
-              </div>
-            </div>
-          </Card>
-          <Card className="p-5">
-            <div className="flex items-center gap-3">
-              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--surface-alt)]">
-                <TrendingUp className="h-5 w-5 text-[var(--brand)]" />
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Average Ticket</p>
-                <p className="text-2xl font-semibold text-[var(--text)]">
-                  {formatCurrency(totalTransactions > 0 ? totalRevenue / totalTransactions : 0)}
-                </p>
-              </div>
-            </div>
-          </Card>
-        </section>
-      )}
     </div>
   );
 }

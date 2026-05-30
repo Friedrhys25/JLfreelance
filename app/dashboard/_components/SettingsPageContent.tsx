@@ -1,14 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Building, Scissors, Users } from "lucide-react";
+import { Building, Eye, EyeOff, KeyRound, Scissors, Users } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { Button } from "@/app/components/Button";
 import { Input } from "@/app/components/Input";
 import { Modal } from "@/app/components/Modal";
 import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import { ServiceSettingsContent } from "@/app/dashboard/settings/_components/ServiceSettingsContent";
-import { createBarber } from "@/lib/api";
+import { changePassword, createBarber } from "@/lib/api";
 
 export function SettingsPageContent() {
   const { addBranch, addUser, branches, deleteUser, isAdmin, isClient, logout, user, users } = useAuth();
@@ -16,7 +16,18 @@ export function SettingsPageContent() {
   const [addBarberModalOpen, setAddBarberModalOpen] = useState(false);
   const [addUserModalOpen, setAddUserModalOpen] = useState(false);
   const [addBranchModalOpen, setAddBranchModalOpen] = useState(false);
+  const [changePasswordModalOpen, setChangePasswordModalOpen] = useState(false);
+  const [usernameTakenModalOpen, setUsernameTakenModalOpen] = useState(false);
+  const [showUserPassword, setShowUserPassword] = useState(false);
+  const [showPasswordFields, setShowPasswordFields] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<(typeof users)[number] | null>(null);
   const [newBranchName, setNewBranchName] = useState("");
+  const [passwordDraft, setPasswordDraft] = useState({
+    currentPassword: "",
+    newPassword: "",
+    confirmPassword: "",
+  });
+  const [passwordMessage, setPasswordMessage] = useState("");
   const [newUser, setNewUser] = useState({
     username: "",
     password: "",
@@ -52,6 +63,68 @@ export function SettingsPageContent() {
     setAddBarberModalOpen(true);
   };
 
+  const resetNewUser = () => {
+    setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
+    setShowUserPassword(false);
+  };
+
+  const handleAddUser = async () => {
+    const username = newUser.username.trim();
+    if (!username || !newUser.password) {
+      return;
+    }
+
+    const usernameExists = users.some((storedUser) => storedUser.username.toLowerCase() === username.toLowerCase());
+    if (usernameExists) {
+      setUsernameTakenModalOpen(true);
+      return;
+    }
+
+    try {
+      await addUser({
+        username,
+        password: newUser.password,
+        role: newUser.role,
+        branchId: resolveBranchId(newUser.branch),
+      });
+      resetNewUser();
+    } catch {
+      setUsernameTakenModalOpen(true);
+    }
+  };
+
+  const resetPasswordDraft = () => {
+    setPasswordDraft({ currentPassword: "", newPassword: "", confirmPassword: "" });
+    setPasswordMessage("");
+    setShowPasswordFields(false);
+  };
+
+  const handleChangePassword = async () => {
+    if (!passwordDraft.currentPassword || !passwordDraft.newPassword || !passwordDraft.confirmPassword) {
+      setPasswordMessage("Fill in all password fields.");
+      return;
+    }
+
+    if (passwordDraft.newPassword !== passwordDraft.confirmPassword) {
+      setPasswordMessage("New password and confirmation do not match.");
+      return;
+    }
+
+    try {
+      await changePassword({
+        currentPassword: passwordDraft.currentPassword,
+        newPassword: passwordDraft.newPassword,
+      });
+      setPasswordMessage("Password changed.");
+      setTimeout(() => {
+        setChangePasswordModalOpen(false);
+        resetPasswordDraft();
+      }, 700);
+    } catch (error) {
+      setPasswordMessage(error instanceof Error ? error.message : "Failed to change password.");
+    }
+  };
+
   return (
     <div className="min-h-screen">
       <DashboardTopBar
@@ -74,6 +147,10 @@ export function SettingsPageContent() {
             <p className="mt-1 text-sm text-[var(--muted)]">Add barbers or manage user access.</p>
           </div>
           <div className="flex flex-wrap gap-2">
+            <Button variant="outline" onClick={() => setChangePasswordModalOpen(true)}>
+              <KeyRound className="h-4 w-4" />
+              Change Password
+            </Button>
             {isAdmin && (
               <Button variant="outline" onClick={() => setAddBranchModalOpen(true)}>
                 <Building className="h-4 w-4" />
@@ -239,7 +316,7 @@ export function SettingsPageContent() {
         isOpen={addUserModalOpen}
         onClose={() => {
           setAddUserModalOpen(false);
-          setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
+          resetNewUser();
         }}
         title="Manage Users"
         footer={
@@ -248,7 +325,7 @@ export function SettingsPageContent() {
               variant="outline"
               onClick={() => {
                 setAddUserModalOpen(false);
-                setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
+                resetNewUser();
               }}
               className="flex-1"
             >
@@ -256,19 +333,7 @@ export function SettingsPageContent() {
             </Button>
             <Button
               variant="primary"
-              onClick={() => {
-                if (!newUser.username || !newUser.password) {
-                  return;
-                }
-
-                addUser({
-                  username: newUser.username,
-                  password: newUser.password,
-                  role: newUser.role,
-                  branchId: resolveBranchId(newUser.branch),
-                });
-                setNewUser({ username: "", password: "", role: "cashier", branch: "Main Branch" });
-              }}
+              onClick={handleAddUser}
               className="flex-1"
             >
               Add User
@@ -285,14 +350,30 @@ export function SettingsPageContent() {
             onChange={(event) => setNewUser((current) => ({ ...current, username: event.target.value }))}
             icon={<Users className="h-4 w-4" />}
           />
-          <Input
-            type="password"
-            label="Password"
-            placeholder="Enter password"
-            value={newUser.password}
-            onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))}
-            icon={<Users className="h-4 w-4" />}
-          />
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor="new-user-password" className="text-sm font-medium text-[var(--muted)]">
+              Password
+            </label>
+            <div className="relative">
+              <Users className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+              <input
+                id="new-user-password"
+                type={showUserPassword ? "text" : "password"}
+                placeholder="Enter password"
+                value={newUser.password}
+                onChange={(event) => setNewUser((current) => ({ ...current, password: event.target.value }))}
+                className="w-full rounded-lg border border-[var(--border)] bg-white px-10 py-2.5 text-sm text-[var(--text)] transition-all duration-200 placeholder:text-[var(--muted)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+              />
+              <button
+                type="button"
+                onClick={() => setShowUserPassword((current) => !current)}
+                className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)] transition hover:text-[var(--text)]"
+                aria-label={showUserPassword ? "Hide password" : "Show password"}
+              >
+                {showUserPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+              </button>
+            </div>
+          </div>
           <div>
             <label className="mb-1.5 block text-sm font-medium text-[var(--muted)]">
               <Users className="mr-1 inline h-4 w-4" />
@@ -342,15 +423,127 @@ export function SettingsPageContent() {
                         {storedUser.role} · {storedUser.branch ?? "No branch"}
                       </p>
                     </div>
-                    <Button variant="ghost" size="sm" onClick={() => deleteUser(storedUser.id)}>
-                      Remove
-                    </Button>
+                    {storedUser.role !== "admin" && (
+                      <Button variant="ghost" size="sm" onClick={() => setUserToDelete(storedUser)}>
+                        Remove
+                      </Button>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
           )}
         </div>
+      </Modal>
+
+      <Modal
+        isOpen={changePasswordModalOpen}
+        onClose={() => {
+          setChangePasswordModalOpen(false);
+          resetPasswordDraft();
+        }}
+        title="Change Password"
+        footer={
+          <div className="flex w-full gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setChangePasswordModalOpen(false);
+                resetPasswordDraft();
+              }}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={handleChangePassword} className="flex-1">
+              Save Password
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {[
+            { key: "currentPassword", label: "Current Password", placeholder: "Enter current password" },
+            { key: "newPassword", label: "New Password", placeholder: "Enter new password" },
+            { key: "confirmPassword", label: "Confirm Password", placeholder: "Confirm new password" },
+          ].map((field) => (
+            <div key={field.key} className="flex flex-col gap-1.5">
+              <label htmlFor={field.key} className="text-sm font-medium text-[var(--muted)]">
+                {field.label}
+              </label>
+              <div className="relative">
+                <KeyRound className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+                <input
+                  id={field.key}
+                  type={showPasswordFields ? "text" : "password"}
+                  placeholder={field.placeholder}
+                  value={passwordDraft[field.key as keyof typeof passwordDraft]}
+                  onChange={(event) =>
+                    setPasswordDraft((current) => ({
+                      ...current,
+                      [field.key]: event.target.value,
+                    }))
+                  }
+                  className="w-full rounded-lg border border-[var(--border)] bg-white px-10 py-2.5 text-sm text-[var(--text)] transition-all duration-200 placeholder:text-[var(--muted)] focus:border-[var(--brand)] focus:outline-none focus:ring-2 focus:ring-[var(--brand-light)]"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswordFields((current) => !current)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[var(--muted)] transition hover:text-[var(--text)]"
+                  aria-label={showPasswordFields ? "Hide passwords" : "Show passwords"}
+                >
+                  {showPasswordFields ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
+            </div>
+          ))}
+          {passwordMessage && (
+            <p className="rounded-lg bg-[var(--surface-alt)] px-3 py-2 text-sm text-[var(--muted)]">
+              {passwordMessage}
+            </p>
+          )}
+        </div>
+      </Modal>
+
+      <Modal
+        isOpen={usernameTakenModalOpen}
+        onClose={() => setUsernameTakenModalOpen(false)}
+        title="Username Taken"
+        footer={
+          <Button variant="primary" onClick={() => setUsernameTakenModalOpen(false)} className="w-full">
+            OK
+          </Button>
+        }
+      >
+        <p className="text-sm text-[var(--muted)]">The username is already taken.</p>
+      </Modal>
+
+      <Modal
+        isOpen={Boolean(userToDelete)}
+        onClose={() => setUserToDelete(null)}
+        title="Remove User"
+        footer={
+          <div className="flex w-full gap-2">
+            <Button variant="outline" onClick={() => setUserToDelete(null)} className="flex-1">
+              Cancel
+            </Button>
+            <Button
+              variant="error"
+              onClick={async () => {
+                if (!userToDelete) return;
+                await deleteUser(userToDelete.id);
+                setUserToDelete(null);
+              }}
+              className="flex-1"
+            >
+              Remove
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-[var(--muted)]">
+          Remove {userToDelete?.username ?? "this user"} from access?
+        </p>
       </Modal>
     </div>
   );

@@ -84,6 +84,55 @@ app.get("/auth/me", requireAuth, (req, res) => {
   });
 });
 
+app.put("/auth/password", requireAuth, async (req, res) => {
+  const { currentPassword, newPassword } = req.body as { currentPassword?: string; newPassword?: string };
+
+  if (!req.user) {
+    res.status(401).json({ error: "Unauthorized" });
+    return;
+  }
+
+  if (!currentPassword || !newPassword) {
+    res.status(400).json({ error: "Current password and new password are required" });
+    return;
+  }
+
+  if (newPassword.length < 6) {
+    res.status(400).json({ error: "New password must be at least 6 characters" });
+    return;
+  }
+
+  const { data, error } = await supabase
+    .from("users")
+    .select("password_hash")
+    .eq("id", req.user.id)
+    .single();
+
+  if (error || !data) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+
+  const isValid = await verifyPassword(currentPassword, data.password_hash);
+  if (!isValid) {
+    res.status(400).json({ error: "Current password is incorrect" });
+    return;
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  const { error: updateError } = await supabase
+    .from("users")
+    .update({ password_hash: passwordHash })
+    .eq("id", req.user.id);
+
+  if (updateError) {
+    res.status(500).json({ error: updateError.message });
+    return;
+  }
+
+  res.json({ ok: true });
+});
+
 app.get("/branches", requireAuth, async (_req, res) => {
   const { data, error } = await supabase.from("branches").select("id, name").order("name");
 
@@ -156,14 +205,20 @@ app.post("/users", requireAuth, requireAdmin, async (req, res) => {
     return;
   }
 
+  const normalizedUsername = username.trim();
   const passwordHash = await hashPassword(password);
   const { data, error } = await supabase
     .from("users")
-    .insert({ username, password_hash: passwordHash, role, branch_id: branchId ?? null })
+    .insert({ username: normalizedUsername, password_hash: passwordHash, role, branch_id: branchId ?? null })
     .select("id, username, role, branch:branches(id, name), created_at")
     .single();
 
   if (error || !data) {
+    if (error?.code === "23505") {
+      res.status(409).json({ error: "Username is already taken" });
+      return;
+    }
+
     res.status(500).json({ error: error?.message || "Failed to create user" });
     return;
   }
@@ -338,7 +393,7 @@ app.get("/services/:id", requireAuth, async (req, res) => {
   });
 });
 
-app.post("/services", requireAuth, requireAdmin, async (req, res) => {
+app.post("/services", requireAuth, async (req, res) => {
   const { name, description, price, duration, taxRate, status, branchId } = req.body as {
     name?: string;
     description?: string;
@@ -354,6 +409,17 @@ app.post("/services", requireAuth, requireAdmin, async (req, res) => {
     return;
   }
 
+  if (req.user?.role !== "admin" && req.user?.role !== "client") {
+    res.status(403).json({ error: "Admin or client access required" });
+    return;
+  }
+
+  const resolvedBranchId = req.user?.role === "client" ? req.user.branchId ?? null : branchId ?? null;
+  if (req.user?.role === "client" && !resolvedBranchId) {
+    res.status(403).json({ error: "Client branch is required" });
+    return;
+  }
+
   const { data, error } = await supabase
     .from("services")
     .insert({
@@ -363,7 +429,7 @@ app.post("/services", requireAuth, requireAdmin, async (req, res) => {
       duration,
       tax_rate: taxRate ?? 0,
       status: status ?? "active",
-      branch_id: branchId ?? null,
+      branch_id: resolvedBranchId,
     })
     .select("id, name, description, price, duration, tax_rate, status, branch_id")
     .single();
@@ -541,7 +607,7 @@ app.get("/service-splits", requireAuth, async (req, res) => {
   );
 });
 
-app.put("/service-splits", requireAuth, requireAdmin, async (req, res) => {
+app.put("/service-splits", requireAuth, async (req, res) => {
   const { splits } = req.body as {
     splits?: Array<{ serviceId?: string | null; shopPct: number; barberPct: number; branchId?: string | null }>;
   };
@@ -554,6 +620,23 @@ app.put("/service-splits", requireAuth, requireAdmin, async (req, res) => {
   if (splits.some((split) => !split.branchId)) {
     res.status(400).json({ error: "Branch is required for each split" });
     return;
+  }
+
+  if (req.user?.role !== "admin" && req.user?.role !== "client") {
+    res.status(403).json({ error: "Admin or client access required" });
+    return;
+  }
+
+  if (req.user?.role === "client") {
+    if (!req.user.branchId) {
+      res.status(403).json({ error: "Client branch is required" });
+      return;
+    }
+
+    if (splits.some((split) => split.branchId !== req.user?.branchId)) {
+      res.status(403).json({ error: "Clients can only update their branch split" });
+      return;
+    }
   }
 
   const mutations = await Promise.all(

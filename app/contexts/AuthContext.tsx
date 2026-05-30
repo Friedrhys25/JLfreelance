@@ -227,12 +227,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   const addUser = async (userData: { username: string; password: string; role: Exclude<Role, null>; branchId?: string | null }) => {
-    try {
-      const created = await createUser(userData);
-      dispatch({ type: "addUser", payload: mapStoredUsers([created])[0] });
-    } catch {
-      return;
-    }
+    const created = await createUser(userData);
+    dispatch({ type: "addUser", payload: mapStoredUsers([created])[0] });
   };
 
   const deleteUser = async (userId: string) => {
