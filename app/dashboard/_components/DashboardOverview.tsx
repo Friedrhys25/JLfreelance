@@ -1,7 +1,7 @@
 "use client";
 
 import { BarChart, Bar, CartesianGrid, Cell, Legend, Line, LineChart, Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
-import { Building, Calendar, Clock3, Download, Plus, Trash2, TrendingUp } from "lucide-react";
+import { Building, Calendar, CheckCircle, Clock3, Download, Plus, Trash2, TrendingUp } from "lucide-react";
 import { Badge } from "@/app/components/Badge";
 import { Button } from "@/app/components/Button";
 import { Card } from "@/app/components/Card";
@@ -30,6 +30,7 @@ interface OverviewProps {
   totalTransactions: number;
   pieChartData: Array<{ name: string; value: number }>;
   queueCount: number;
+  onCompleteTransaction: (id: string) => void;
   onDeleteTransaction: (id: string) => void;
   onExportCSV: () => void;
   onOpenQueueModal: () => void;
@@ -55,6 +56,7 @@ export function DashboardOverview({
   isCashier,
   isBranchLocked,
   lockedBranchId,
+  onCompleteTransaction,
   onDeleteTransaction,
   onEndDateChange,
   onExportCSV,
@@ -294,6 +296,16 @@ export function DashboardOverview({
                     </TableCell>
                     <TableCell className="font-semibold">{formatCurrency(transaction.cost)}</TableCell>
                     <TableCell className="text-right">
+                      {transaction.status === "queued" && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => onCompleteTransaction(transaction.id)}
+                          className="mr-2"
+                        >
+                          <CheckCircle className="h-4 w-4 text-green-600" />
+                        </Button>
+                      )}
                       <Button variant="ghost" size="sm" onClick={() => onDeleteTransaction(transaction.id)}>
                         <Trash2 className="h-4 w-4 text-yellow-600" />
                       </Button>

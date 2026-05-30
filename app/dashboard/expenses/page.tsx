@@ -170,7 +170,7 @@ export default function DashboardExpensesPage() {
     .sort(([monthA], [monthB]) => monthA.localeCompare(monthB))
     .map(([month, totals]) => ({
       month,
-      label: new Date(`${month}-01`).toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+      label: new Date(`${month}-01`).toLocaleDateString("en-US", { month: "long" }),
       electricity: totals.electricity,
       water: totals.water,
       rent: totals.rent,

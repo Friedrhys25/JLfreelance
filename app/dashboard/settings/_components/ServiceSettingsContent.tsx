@@ -36,6 +36,13 @@ function mapService(apiService: ApiService): ServiceSetting {
 export function ServiceSettingsContent() {
   const { branches, isCashier, isClient, user } = useAuth();
   const [services, setServices] = useState<ServiceSetting[]>([]);
+  const [pendingServices, setPendingServices] = useState<any[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  const [cashierWarningModalOpen, setCashierWarningModalOpen] = useState(false);
+  const combinedServices = [
+    ...services.map((s) => ({ ...s, isPending: false })),
+    ...pendingServices.map((s, i) => ({ id: `pending-${i}`, name: s.name, price: s.price, duration: s.duration, isPending: true, pendingIndex: i })),
+  ];
   const [splits, setSplits] = useState<Record<string, ServiceSplitSetting>>({});
   const [isDirty, setIsDirty] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
@@ -49,8 +56,10 @@ export function ServiceSettingsContent() {
   });
 
   const clientBranchId = isClient ? user.branchId ?? branches.find((branch) => branch.name === user.branch)?.id ?? "" : "";
-  const selectedBranchId = clientBranchId || selectedBranchIdState || branches[0]?.id || "";
-  const visibleBranches = clientBranchId ? branches.filter((branch) => branch.id === clientBranchId) : branches;
+  const cashierBranchId = isCashier ? user.branchId ?? branches.find((branch) => branch.name === user.branch)?.id ?? "" : "";
+  const lockedBranchId = clientBranchId || cashierBranchId;
+  const selectedBranchId = lockedBranchId || selectedBranchIdState || branches[0]?.id || "";
+  const visibleBranches = lockedBranchId ? branches.filter((branch) => branch.id === lockedBranchId) : branches;
   const branchSplit = getSplitForServiceName(splits, BRANCH_SPLIT_KEY);
   const isCashierReadOnly = isCashier;
 
@@ -97,6 +106,11 @@ export function ServiceSettingsContent() {
     setIsDirty(true);
   };
 
+  const removePendingService = (index: number) => {
+    setPendingServices((current) => current.filter((_, i) => i !== index));
+    setIsDirty((prev) => pendingServices.length - 1 > 0 ? prev : false);
+  };
+
   const deleteService = async (id: string) => {
     await deleteServiceApi(id);
     setServices((current) => current.filter((service) => service.id !== id));
@@ -122,27 +136,26 @@ export function ServiceSettingsContent() {
     const numeric = Number.parseFloat(value);
     const duration = Number.isFinite(numeric) && numeric > 0 ? `${numeric} ${unit}` : `30 ${unit}`;
 
-    const created = await createService({
-      name,
-      description: "",
-      price,
-      duration,
-      taxRate: 0,
-      status: "active",
-      branchId: selectedBranchId,
-    });
-
-    setServices((current) => [...current, mapService(created)]);
-
+    setPendingServices((curr) => [...curr, { name, description: "", price, duration, taxRate: 0, status: "active", branchId: selectedBranchId }]);
     setNewService({ name: "", price: "", durationValue: "30", durationUnit: "min" });
     setIsDirty(true);
   };
 
   const handleSave = async () => {
-    if (isCashierReadOnly) return;
-    if (!selectedBranchId) return;
-    await saveServiceSplits([{ ...branchSplit, branchId: selectedBranchId }]);
-    setIsDirty(false);
+    if (isCashierReadOnly || !selectedBranchId) return;
+    setIsSaving(true);
+    try {
+      for (const svc of pendingServices) {
+        await createService(svc);
+      }
+      await saveServiceSplits([{ ...branchSplit, branchId: selectedBranchId }]);
+      setPendingServices([]);
+      setIsDirty(false);
+      const serviceList = await listServices({ branchId: selectedBranchId });
+      setServices(serviceList.map((s) => ({ id: s.id, name: s.name, price: s.price, duration: s.duration })));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const handleBranchChange = (branchId: string) => {
@@ -190,8 +203,8 @@ export function ServiceSettingsContent() {
           <select
             value={selectedBranchId}
             onChange={(event) => handleBranchChange(event.target.value)}
-            disabled={isClient}
-            className="h-10 rounded-lg border border-(--border) bg-white px-4 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light) disabled:bg-(--surface-alt)"
+            disabled={isClient || isCashier}
+            className="h-10 rounded-lg border border-(--border) bg-white px-4 text-sm text-(--text) focus:border-(--brand) focus:outline-none focus:ring-2 focus:ring-(--brand-light) disabled:cursor-not-allowed disabled:opacity-60 disabled:bg-(--surface-alt)"
           >
             {visibleBranches.map((branch) => (
               <option key={branch.id} value={branch.id}>
@@ -213,19 +226,42 @@ export function ServiceSettingsContent() {
           </div>
 
           <div className="space-y-4">
-            {services.map((service) => (
+            {combinedServices.map((service) => (
               <div
                 key={service.id}
-                className="rounded-2xl border border-(--border) bg-white p-4"
+                className={`rounded-2xl border p-4 transition-colors ${
+                  service.isPending
+                    ? "border-amber-300 bg-amber-50"
+                    : "border-(--border) bg-white"
+                }`}
               >
                 <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-(--text)">{service.name}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-(--text)">{service.name}</p>
+                      {service.isPending && (
+                        <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-700">
+                          Unsaved
+                        </span>
+                      )}
+                    </div>
                     <p className="text-xs text-(--muted)">
                       {service.duration} · ₱{service.price.toLocaleString()}
                     </p>
                   </div>
-                  <Button variant="error" size="sm" onClick={() => setServiceToDelete(service)}>
+                  <Button
+                    variant="error"
+                    size="sm"
+                    onClick={() => {
+                      if (isCashierReadOnly) {
+                        setCashierWarningModalOpen(true);
+                      } else if (service.isPending) {
+                        removePendingService((service as any).pendingIndex);
+                      } else {
+                        setServiceToDelete(service);
+                      }
+                    }}
+                  >
                     <Trash2 className="h-4 w-4" />
                   </Button>
                 </div>
@@ -319,6 +355,11 @@ export function ServiceSettingsContent() {
             <p className="mt-1 text-sm text-(--muted)">
               Saves services and splits to the database.
             </p>
+            {pendingServices.length > 0 && (
+              <p className="mt-2 text-xs font-medium text-amber-600">
+                {pendingServices.length} unsaved service{pendingServices.length > 1 ? "s" : ""} — press Save to confirm.
+              </p>
+            )}
             <Button
               variant="outline"
               size="lg"
@@ -327,7 +368,7 @@ export function ServiceSettingsContent() {
               disabled={isCashierReadOnly || !hasUnsavedChanges}
             >
               <Save className="h-5 w-5" />
-              Save Settings
+              {isSaving ? "Saving..." : "Save Settings"}
             </Button>
           </Card>
         </div>
@@ -351,6 +392,15 @@ export function ServiceSettingsContent() {
         <p className="text-sm text-(--muted)">
           This will permanently delete {serviceToDelete?.name ?? "this service"} and its split settings.
         </p>
+      </Modal>
+
+      <Modal
+        isOpen={cashierWarningModalOpen}
+        onClose={() => setCashierWarningModalOpen(false)}
+        title="Permission Denied"
+        footer={<Button variant="primary" onClick={() => setCashierWarningModalOpen(false)} className="w-full">OK</Button>}
+      >
+        <p className="text-sm text-[var(--muted)]">Admin and Client only can delete a service.</p>
       </Modal>
     </main>
   );

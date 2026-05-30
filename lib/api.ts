@@ -179,6 +179,10 @@ export async function createBarber(input: { name: string; specialty?: string; av
   });
 }
 
+export async function deleteBarber(id: string) {
+  return apiFetch<void>(`/barbers/${id}`, { method: "DELETE" });
+}
+
 export async function listServices(params?: { branchId?: string }) {
   const search = new URLSearchParams();
   if (params?.branchId) search.set("branchId", params.branchId);
@@ -268,6 +272,10 @@ export async function createTransaction(input: {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export async function completeTransaction(id: string) {
+  return apiFetch<void>(`/transactions/${id}/complete`, { method: "PATCH" });
 }
 
 export async function deleteTransaction(id: string) {

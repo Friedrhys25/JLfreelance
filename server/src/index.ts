@@ -181,12 +181,12 @@ app.get("/users", requireAuth, requireAdmin, async (_req, res) => {
     (data ?? []).map((row) => {
       const branch = firstOrNull(row.branch);
       return {
-      id: row.id,
-      username: row.username,
-      role: row.role,
-      branchId: branch?.id ?? null,
-      branch: branch?.name ?? null,
-      createdAt: row.created_at,
+        id: row.id,
+        username: row.username,
+        role: row.role,
+        branchId: branch?.id ?? null,
+        branch: branch?.name ?? null,
+        createdAt: row.created_at,
       };
     })
   );
@@ -248,7 +248,9 @@ app.delete("/users/:id", requireAuth, requireAdmin, async (req, res) => {
 });
 
 app.get("/barbers", requireAuth, async (req, res) => {
-  let query = supabase.from("barbers").select("id, name, avatar, specialty, branch:branches(id, name)");
+  let query = supabase.from("barbers")
+    .select("id, name, avatar, specialty, branch:branches(id, name)")
+    .neq("avatar", "__DELETED__");
 
   if (isBranchScopedRole(req.user?.role) && !req.user?.branchId) {
     res.json([]);
@@ -270,12 +272,12 @@ app.get("/barbers", requireAuth, async (req, res) => {
     (data ?? []).map((row) => {
       const branch = firstOrNull(row.branch);
       return {
-      id: row.id,
-      name: row.name,
-      avatar: row.avatar ?? row.name.slice(0, 2).toUpperCase(),
-      specialty: row.specialty ?? "",
-      branchId: branch?.id ?? null,
-      branch: branch?.name ?? null,
+        id: row.id,
+        name: row.name,
+        avatar: row.avatar ?? row.name.slice(0, 2).toUpperCase(),
+        specialty: row.specialty ?? "",
+        branchId: branch?.id ?? null,
+        branch: branch?.name ?? null,
       };
     })
   );
@@ -327,11 +329,22 @@ app.post("/barbers", requireAuth, async (req, res) => {
   });
 });
 
+app.delete("/barbers/:id", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from("barbers").update({ avatar: "__DELETED__" }).eq("id", id);
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+  res.status(204).end();
+});
+
 app.get("/services", requireAuth, async (req, res) => {
   const { branchId } = req.query as { branchId?: string };
   let query = supabase
     .from("services")
     .select("id, name, description, price, duration, tax_rate, status, branch_id")
+    .eq("status", "active")
     .order("name");
 
   const enforcedBranchId = isBranchScopedRole(req.user?.role) ? req.user.branchId : branchId;
@@ -493,7 +506,11 @@ app.put("/services/:id", requireAuth, requireAdmin, async (req, res) => {
   });
 });
 
-app.delete("/services/:id", requireAuth, requireAdmin, async (req, res) => {
+app.delete("/services/:id", requireAuth, async (req, res) => {
+  if (req.user?.role !== "admin" && req.user?.role !== "client") {
+    res.status(403).json({ error: "Admin or client access required" });
+    return;
+  }
   const { id } = req.params;
   const { count, error: countError } = await supabase
     .from("transactions")
@@ -722,16 +739,16 @@ app.get("/transactions", requireAuth, async (req, res) => {
       const service = firstOrNull(row.service);
       const branch = firstOrNull(row.branch);
       return {
-      id: row.id,
-      date: row.date,
-      time: row.time,
-      clientName: row.client_name,
-      barber: barber?.name ?? "",
-      service: service?.name ?? "",
-      cost: Number(row.cost),
-      status: row.status,
-      branchId: branch?.id ?? null,
-      branch: branch?.name ?? null,
+        id: row.id,
+        date: row.date,
+        time: row.time,
+        clientName: row.client_name,
+        barber: barber?.name ?? "",
+        service: service?.name ?? "",
+        cost: Number(row.cost),
+        status: row.status,
+        branchId: branch?.id ?? null,
+        branch: branch?.name ?? null,
       };
     })
   );
@@ -817,11 +834,6 @@ app.post("/transactions", requireAuth, async (req, res) => {
 });
 
 app.delete("/transactions/:id", requireAuth, async (req, res) => {
-  if (req.user?.role === "client") {
-    res.status(403).json({ error: "Not allowed" });
-    return;
-  }
-
   const { id } = req.params;
   const { error } = await supabase.from("transactions").delete().eq("id", id);
 
@@ -831,6 +843,13 @@ app.delete("/transactions/:id", requireAuth, async (req, res) => {
   }
 
   res.status(204).end();
+});
+
+app.patch("/transactions/:id/complete", requireAuth, async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from("transactions").update({ status: "completed" }).eq("id", id);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.status(200).json({ ok: true });
 });
 
 app.get("/expenses", requireAuth, async (req, res) => {
@@ -867,13 +886,13 @@ app.get("/expenses", requireAuth, async (req, res) => {
     (data ?? []).map((row) => {
       const branch = firstOrNull(row.branch);
       return {
-      id: row.id,
-      month: row.month,
-      electricity: Number(row.electricity),
-      water: Number(row.water),
-      rent: Number(row.rent),
-      other: Number(row.other),
-      branch: branch?.name ?? null,
+        id: row.id,
+        month: row.month,
+        electricity: Number(row.electricity),
+        water: Number(row.water),
+        rent: Number(row.rent),
+        other: Number(row.other),
+        branch: branch?.name ?? null,
       };
     })
   );
@@ -947,6 +966,32 @@ app.post("/expenses", requireAuth, async (req, res) => {
     branch: expenseBranch?.name ?? null,
   });
 });
+
+setInterval(async () => {
+  try {
+    const { data: queuedTransactions, error } = await supabase.from("transactions").select("id, created_at, service:services(duration)").eq("status", "queued");
+    if (error || !queuedTransactions) return;
+    const now = new Date();
+    for (const txn of queuedTransactions) {
+      const service = Array.isArray(txn.service) ? txn.service[0] : txn.service;
+      if (!service || !service.duration) continue;
+      const match = service.duration.match(/(\d+)/);
+      if (match) {
+        let totalMinutes = parseInt(match[1], 10);
+        if (service.duration.toLowerCase().includes("hour") || service.duration.toLowerCase().includes("hr")) {
+          totalMinutes *= 60;
+        }
+        const createdAt = new Date(txn.created_at);
+        const diffMins = (now.getTime() - createdAt.getTime()) / (1000 * 60);
+        if (diffMins >= totalMinutes) {
+          await supabase.from("transactions").update({ status: "completed" }).eq("id", txn.id);
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Auto-complete error:", error);
+  }
+}, 60 * 1000);
 
 app.listen(port, () => {
   console.log(`Server running on http://localhost:${port}`);

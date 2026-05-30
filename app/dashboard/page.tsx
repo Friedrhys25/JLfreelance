@@ -12,6 +12,7 @@ import { DashboardOverview } from "@/app/dashboard/_components/DashboardOverview
 import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import type { Barber, Transaction } from "@/app/dashboard/types";
 import {
+  completeTransaction,
   createTransaction,
   deleteTransaction as deleteTransactionApi,
   listBarbers,
@@ -42,6 +43,7 @@ export default function DashboardPage() {
   const [selectedBranch, setSelectedBranch] = useState("all");
   const [deleteQueueModalOpen, setDeleteQueueModalOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
+  const [isSubmittingQueue, setIsSubmittingQueue] = useState(false);
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -202,7 +204,7 @@ export default function DashboardPage() {
         const [year, monthIndex] = month.split("-").map(Number);
         const labelDate = new Date(year, monthIndex - 1, 1);
         return {
-          month: labelDate.toLocaleDateString("en-US", { month: "short", year: "2-digit" }),
+          month: labelDate.toLocaleDateString("en-US", { month: "long" }),
           revenue,
         };
       });
@@ -229,7 +231,7 @@ export default function DashboardPage() {
   const queueServices = isAdmin ? services.filter((service) => isInQueueBranch(service.branchId, service.branch)) : services;
 
   const handleAddToQueue = async () => {
-    if (!selectedBarber || !selectedService || !clientName.trim()) {
+    if (!selectedBarber || !selectedService || !clientName.trim() || isSubmittingQueue) {
       return;
     }
 
@@ -240,6 +242,7 @@ export default function DashboardPage() {
       return;
     }
 
+    setIsSubmittingQueue(true);
     try {
       const branchId = queueBranchId
         ? queueBranchId
@@ -257,13 +260,29 @@ export default function DashboardPage() {
       setPosModalOpen(false);
       resetPosForm();
     } catch {
-      return;
+      // ignore
+    } finally {
+      setIsSubmittingQueue(false);
     }
   };
 
   const handleDeleteTransaction = async (id: string) => {
     await deleteTransactionApi(id);
     setTransactions((currentTransactions) => currentTransactions.filter((transaction) => transaction.id !== id));
+  };
+
+  const handleCompleteTransaction = async (id: string) => {
+    try {
+      await completeTransaction(id);
+      setTransactions((currentTransactions) =>
+        currentTransactions.map((transaction) =>
+          transaction.id === id ? { ...transaction, status: "completed" } : transaction
+        )
+      );
+    } catch (err: any) {
+      console.error(err);
+      alert(err.message || "Failed to complete transaction");
+    }
   };
 
   const confirmDeleteQueue = async () => {
@@ -337,6 +356,7 @@ export default function DashboardPage() {
           isCashier={isCashier}
           isBranchLocked={isBranchLocked}
           lockedBranchId={lockedBranchId}
+          onCompleteTransaction={handleCompleteTransaction}
           onDeleteTransaction={(id) => {
             setPendingDeleteId(id);
             setDeleteQueueModalOpen(true);
@@ -409,9 +429,9 @@ export default function DashboardPage() {
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               ) : (
-                <Button variant="primary" onClick={handleAddToQueue} disabled={!clientName.trim() || !selectedBarberAllowed || !selectedServiceAllowed}>
+                <Button variant="primary" onClick={handleAddToQueue} disabled={isSubmittingQueue || !clientName.trim() || !selectedBarberAllowed || !selectedServiceAllowed}>
                   <CheckCircle className="h-4 w-4" />
-                  Add to Queue
+                  {isSubmittingQueue ? "Adding..." : "Add to Queue"}
                 </Button>
               )}
             </div>
@@ -421,7 +441,7 @@ export default function DashboardPage() {
         {posStep === 1 && (
           <div className="space-y-4">
             <h3 className="text-center text-base font-semibold text-[var(--text)]">Step 1: Choose a barber</h3>
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 gap-3 max-h-80 overflow-y-auto pr-2">
               {queueBarbers.map((barber) => {
                 const branchName = getItemBranchName(barber.branchId, barber.branch);
 
