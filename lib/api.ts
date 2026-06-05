@@ -45,6 +45,7 @@ export interface ApiTransaction {
   date: string;
   time: string;
   clientName: string;
+  contactNumber?: string | null;
   barber: string;
   service: string;
   cost: number;
@@ -151,6 +152,10 @@ export async function createBranch(input: { name: string }) {
     method: "POST",
     body: JSON.stringify(input),
   });
+}
+
+export async function deleteBranch(id: string) {
+  return apiFetch<void>(`/branches/${id}`, { method: "DELETE" });
 }
 
 export async function listUsers() {
@@ -265,6 +270,7 @@ export async function createTransaction(input: {
   barberId: string;
   serviceId: string;
   clientName: string;
+  contactNumber?: string | null;
   status?: string;
   branchId?: string | null;
 }) {

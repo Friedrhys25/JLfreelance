@@ -22,7 +22,7 @@ const locations = [
   {
     name: "Bulacan",
     label: "Provincial Flagship",
-    address: "Identity Hair Studio Bulacan, San Pedro, Camias",
+    address: "Identity Hair Studio Bulacan, San Miguel",
     href: null,
   },
 ];

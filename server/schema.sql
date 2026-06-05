@@ -41,6 +41,7 @@ create table if not exists transactions (
   date date not null,
   time text not null,
   client_name text not null,
+  contact_number text,
   barber_id uuid references barbers (id),
   service_id uuid references services (id),
   cost numeric not null default 0,

@@ -5,6 +5,7 @@ export interface Transaction {
   date: string;
   time: string;
   clientName: string;
+  contactNumber?: string | null;
   barber: string;
   service: string;
   cost: number;
