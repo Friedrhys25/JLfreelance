@@ -6,6 +6,7 @@ import {
   clearStoredToken,
   createBranch,
   createUser,
+  deleteBranch as deleteBranchApi,
   deleteUser as deleteUserApi,
   getMe,
   getStoredToken,
@@ -48,6 +49,7 @@ interface AuthContextType {
   addUser: (user: { username: string; password: string; role: Exclude<Role, null>; branchId?: string | null }) => Promise<void>;
   deleteUser: (userId: string) => Promise<void>;
   addBranch: (name: string) => Promise<void>;
+  deleteBranch: (branchId: string) => Promise<void>;
   branches: ApiBranch[];
 }
 
@@ -65,7 +67,8 @@ type AuthAction =
   | { type: "logout" }
   | { type: "addUser"; payload: StoredUser }
   | { type: "deleteUser"; payload: string }
-  | { type: "addBranch"; payload: ApiBranch };
+  | { type: "addBranch"; payload: ApiBranch }
+  | { type: "deleteBranch"; payload: string };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -126,6 +129,11 @@ function authReducer(state: AuthState, action: AuthAction): AuthState {
         branches,
       };
     }
+    case "deleteBranch":
+      return {
+        ...state,
+        branches: state.branches.filter((branch) => branch.id !== action.payload),
+      };
     default:
       return state;
   }
@@ -249,6 +257,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
+  const deleteBranch = async (branchId: string) => {
+    await deleteBranchApi(branchId);
+    dispatch({ type: "deleteBranch", payload: branchId });
+  };
+
   const value = {
     user: state.user,
     login,
@@ -261,6 +274,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     addUser,
     deleteUser,
     addBranch,
+    deleteBranch,
     branches: state.branches,
   };
 

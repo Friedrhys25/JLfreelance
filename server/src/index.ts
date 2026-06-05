@@ -166,6 +166,23 @@ app.post("/branches", requireAuth, requireAdmin, async (req, res) => {
   res.status(201).json(data);
 });
 
+app.delete("/branches/:id", requireAuth, requireAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { error } = await supabase.from("branches").delete().eq("id", id);
+
+  if (error) {
+    if (error.code === "23503") {
+      res.status(409).json({ error: "Branch is still in use" });
+      return;
+    }
+
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.status(204).end();
+});
+
 app.get("/users", requireAuth, requireAdmin, async (_req, res) => {
   const { data, error } = await supabase
     .from("users")
@@ -697,18 +714,18 @@ app.get("/transactions", requireAuth, async (req, res) => {
     search?: string;
   };
 
-  let query = supabase
-    .from("transactions")
-    .select(
-      "id, date, time, client_name, status, cost, barber:barbers(id, name), service:services(id, name), branch:branches(id, name)"
-    )
-    .order("date", { ascending: false });
-
   const enforcedBranchId = isBranchScopedRole(req.user?.role) ? req.user.branchId : branchId;
   if (isBranchScopedRole(req.user?.role) && !enforcedBranchId) {
     res.json([]);
     return;
   }
+
+  let query = supabase
+    .from("transactions")
+    .select(
+      "id,date,time,client_name,contact_number,status,cost,barber:barbers(id,name),service:services(id,name),branch:branches(id,name)"
+    )
+    .order("date", { ascending: false });
 
   if (enforcedBranchId) {
     query = query.eq("branch_id", enforcedBranchId);
@@ -722,7 +739,7 @@ app.get("/transactions", requireAuth, async (req, res) => {
   const searchTerm = search?.trim();
   if (searchTerm) {
     query = query.or(
-      `client_name.ilike.%${searchTerm}%,barbers.name.ilike.%${searchTerm}%,services.name.ilike.%${searchTerm}%`
+      `client_name.ilike.%${searchTerm}%,contact_number.ilike.%${searchTerm}%,barbers.name.ilike.%${searchTerm}%,services.name.ilike.%${searchTerm}%`
     );
   }
 
@@ -743,6 +760,7 @@ app.get("/transactions", requireAuth, async (req, res) => {
         date: row.date,
         time: row.time,
         clientName: row.client_name,
+        contactNumber: row.contact_number ?? null,
         barber: barber?.name ?? "",
         service: service?.name ?? "",
         cost: Number(row.cost),
@@ -755,16 +773,23 @@ app.get("/transactions", requireAuth, async (req, res) => {
 });
 
 app.post("/transactions", requireAuth, async (req, res) => {
-  const { barberId, serviceId, clientName, status, branchId } = req.body as {
+  const { barberId, serviceId, clientName, contactNumber, status, branchId } = req.body as {
     barberId?: string;
     serviceId?: string;
     clientName?: string;
+    contactNumber?: string | null;
     status?: string;
     branchId?: string | null;
   };
 
   if (!barberId || !serviceId || !clientName) {
     res.status(400).json({ error: "Barber, service, and client name are required" });
+    return;
+  }
+
+  const normalizedContactNumber = contactNumber?.trim() ?? "";
+  if (!/^09\d{9}$/.test(normalizedContactNumber)) {
+    res.status(400).json({ error: "Contact number must be 11 digits and start with 09" });
     return;
   }
 
@@ -800,6 +825,7 @@ app.post("/transactions", requireAuth, async (req, res) => {
       barber_id: barberId,
       service_id: serviceId,
       client_name: clientName,
+      contact_number: normalizedContactNumber,
       status: status ?? "queued",
       cost: Number(service.price),
       date,
@@ -807,7 +833,7 @@ app.post("/transactions", requireAuth, async (req, res) => {
       branch_id: resolvedBranchId,
     })
     .select(
-      "id, date, time, client_name, status, cost, barber:barbers(name), service:services(name), branch:branches(id, name)"
+      "id,date,time,client_name,contact_number,status,cost,barber:barbers(name),service:services(name),branch:branches(id,name)"
     )
     .single();
 
@@ -824,6 +850,7 @@ app.post("/transactions", requireAuth, async (req, res) => {
     date: data.date,
     time: data.time,
     clientName: data.client_name,
+    contactNumber: data.contact_number ?? null,
     barber: createdBarber?.name ?? "",
     service: createdService?.name ?? "",
     cost: Number(data.cost),
@@ -834,6 +861,11 @@ app.post("/transactions", requireAuth, async (req, res) => {
 });
 
 app.delete("/transactions/:id", requireAuth, async (req, res) => {
+  if (req.user?.role === "cashier") {
+    res.status(403).json({ error: "Only admin and client can delete transaction history" });
+    return;
+  }
+
   const { id } = req.params;
   const { error } = await supabase.from("transactions").delete().eq("id", id);
 

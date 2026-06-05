@@ -267,6 +267,7 @@ export function DashboardOverview({
                   <TableHead>Date</TableHead>
                   <TableHead>Time</TableHead>
                   <TableHead>Client</TableHead>
+                  <TableHead>Contact</TableHead>
                   <TableHead>Barber</TableHead>
                   <TableHead>Service</TableHead>
                   <TableHead>Branch</TableHead>
@@ -281,6 +282,7 @@ export function DashboardOverview({
                     <TableCell>{formatDate(transaction.date)}</TableCell>
                     <TableCell>{transaction.time}</TableCell>
                     <TableCell className="font-medium">{transaction.clientName}</TableCell>
+                    <TableCell>{transaction.contactNumber ?? "No contact"}</TableCell>
                     <TableCell>{transaction.barber}</TableCell>
                     <TableCell>{transaction.service}</TableCell>
                     <TableCell>

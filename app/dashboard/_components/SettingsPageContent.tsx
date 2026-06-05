@@ -9,10 +9,10 @@ import { Modal } from "@/app/components/Modal";
 import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import { ServiceSettingsContent } from "@/app/dashboard/settings/_components/ServiceSettingsContent";
 import { changePassword, createBarber, listBarbers, deleteBarber } from "@/lib/api";
-import type { ApiBarber } from "@/lib/api";
+import type { ApiBarber, ApiBranch } from "@/lib/api";
 
 export function SettingsPageContent() {
-  const { addBranch, addUser, branches, deleteUser, isAdmin, isClient, isCashier, logout, user, users } = useAuth();
+  const { addBranch, addUser, branches, deleteBranch, deleteUser, isAdmin, isClient, isCashier, logout, user, users } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [addBarberModalOpen, setAddBarberModalOpen] = useState(false);
   const [addUserModalOpen, setAddUserModalOpen] = useState(false);
@@ -46,6 +46,10 @@ export function SettingsPageContent() {
   const [isLoadingBarbers, setIsLoadingBarbers] = useState(false);
   const [barberToDelete, setBarberToDelete] = useState<ApiBarber | null>(null);
   const [isDeletingBarber, setIsDeletingBarber] = useState(false);
+  const [allBranchesModalOpen, setAllBranchesModalOpen] = useState(false);
+  const [branchToDelete, setBranchToDelete] = useState<ApiBranch | null>(null);
+  const [isDeletingBranch, setIsDeletingBranch] = useState(false);
+  const [branchDeleteMessage, setBranchDeleteMessage] = useState("");
   const [confirmBranchModalOpen, setConfirmBranchModalOpen] = useState(false);
   const [isSubmittingBranch, setIsSubmittingBranch] = useState(false);
   const [newBranchDraft, setNewBranchDraft] = useState("");
@@ -81,6 +85,20 @@ export function SettingsPageContent() {
       setBarberToDelete(null);
     } finally {
       setIsDeletingBarber(false);
+    }
+  };
+
+  const handleDeleteBranch = async () => {
+    if (!branchToDelete) return;
+    setIsDeletingBranch(true);
+    setBranchDeleteMessage("");
+    try {
+      await deleteBranch(branchToDelete.id);
+      setBranchToDelete(null);
+    } catch (error) {
+      setBranchDeleteMessage(error instanceof Error ? error.message : "Failed to delete branch.");
+    } finally {
+      setIsDeletingBranch(false);
     }
   };
 
@@ -184,6 +202,12 @@ export function SettingsPageContent() {
               <KeyRound className="h-4 w-4" />
               Change Password
             </Button>
+            {isAdmin && (
+              <Button variant="outline" onClick={() => setAllBranchesModalOpen(true)}>
+                <Building className="h-4 w-4" />
+                All Branches
+              </Button>
+            )}
             {isAdmin && (
               <Button variant="outline" onClick={() => setAddBranchModalOpen(true)}>
                 <Building className="h-4 w-4" />
@@ -607,8 +631,89 @@ export function SettingsPageContent() {
           </div>
         }
       >
-        <p className="text-sm text-[var(--muted)]">Are you sure you want to add the branch "{newBranchDraft}"?</p>
+        <p className="text-sm text-[var(--muted)]">Are you sure you want to add {newBranchDraft}?</p>
       </Modal>
+
+      {isAdmin && (
+        <Modal
+          isOpen={allBranchesModalOpen}
+          onClose={() => setAllBranchesModalOpen(false)}
+          title="All Branches"
+          footer={
+            <Button variant="outline" onClick={() => setAllBranchesModalOpen(false)} className="w-full">
+              Close
+            </Button>
+          }
+        >
+          <div className="space-y-3">
+            {branches.length === 0 ? (
+              <p className="text-sm text-[var(--muted)]">No branches found.</p>
+            ) : (
+              <div className="max-h-60 space-y-2 overflow-y-auto pr-2">
+                {branches.map((branch) => (
+                  <div key={branch.id} className="flex items-center justify-between rounded-xl bg-[var(--surface-alt)] p-3">
+                    <div>
+                      <p className="text-sm font-medium text-[var(--text)]">{branch.name}</p>
+                      <p className="text-xs text-[var(--muted)]">{branch.id}</p>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setBranchDeleteMessage("");
+                        setBranchToDelete(branch);
+                      }}
+                    >
+                      Delete
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {isAdmin && (
+        <Modal
+          isOpen={Boolean(branchToDelete)}
+          onClose={() => {
+            if (isDeletingBranch) return;
+            setBranchToDelete(null);
+            setBranchDeleteMessage("");
+          }}
+          title="Delete Branch"
+          footer={
+            <div className="flex w-full gap-2">
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setBranchToDelete(null);
+                  setBranchDeleteMessage("");
+                }}
+                disabled={isDeletingBranch}
+                className="flex-1"
+              >
+                Cancel
+              </Button>
+              <Button variant="error" disabled={isDeletingBranch} onClick={handleDeleteBranch} className="flex-1">
+                {isDeletingBranch ? "Loading..." : "Delete"}
+              </Button>
+            </div>
+          }
+        >
+          <div className="space-y-3">
+            <p className="text-sm text-[var(--muted)]">
+              Delete {branchToDelete?.name ?? "this branch"} permanently?
+            </p>
+            {branchDeleteMessage && (
+              <p className="rounded-lg bg-[var(--surface-alt)] px-3 py-2 text-sm text-red-600">
+                {branchDeleteMessage}
+              </p>
+            )}
+          </div>
+        </Modal>
+      )}
 
       <Modal
         isOpen={allBarbersModalOpen}

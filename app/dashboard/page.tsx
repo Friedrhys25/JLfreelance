@@ -31,8 +31,9 @@ export default function DashboardPage() {
   const [posModalOpen, setPosModalOpen] = useState(false);
   const [posStep, setPosStep] = useState(1);
   const [selectedBarber, setSelectedBarber] = useState<string | null>(null);
-  const [selectedService, setSelectedService] = useState<string | null>(null);
+  const [selectedServices, setSelectedServices] = useState<string[]>([]);
   const [clientName, setClientName] = useState("");
+  const [contactNumber, setContactNumber] = useState("");
   const [barbers, setBarbers] = useState<Barber[]>([]);
   const [services, setServices] = useState<ApiService[]>([]);
   const [transactions, setTransactions] = useState<Transaction[]>([]);
@@ -42,6 +43,8 @@ export default function DashboardPage() {
   const [revenueChartType, setRevenueChartType] = useState<"bar" | "line">("bar");
   const [selectedBranch, setSelectedBranch] = useState("all");
   const [deleteQueueModalOpen, setDeleteQueueModalOpen] = useState(false);
+  const [cashierDeleteDeniedModalOpen, setCashierDeleteDeniedModalOpen] = useState(false);
+  const [confirmAddQueueModalOpen, setConfirmAddQueueModalOpen] = useState(false);
   const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
   const [isSubmittingQueue, setIsSubmittingQueue] = useState(false);
 
@@ -219,26 +222,36 @@ export default function DashboardPage() {
   const resetPosForm = () => {
     setPosStep(1);
     setSelectedBarber(null);
-    setSelectedService(null);
+    setSelectedServices([]);
     setClientName("");
+    setContactNumber("");
   };
 
   const selectedBarberItem = barbers.find((item) => item.id === selectedBarber);
-  const selectedServiceItem = services.find((item) => item.id === selectedService);
   const selectedBarberAllowed = selectedBarberItem ? isInQueueBranch(selectedBarberItem.branchId, selectedBarberItem.branch) : false;
-  const selectedServiceAllowed = selectedServiceItem ? isInQueueBranch(selectedServiceItem.branchId, selectedServiceItem.branch) : false;
+  const selectedServiceItems = services.filter((item) => selectedServices.includes(item.id));
+  const selectedServicesAllowed =
+    selectedServiceItems.length > 0 &&
+    selectedServiceItems.every((item) => isInQueueBranch(item.branchId, item.branch));
   const queueBarbers = isAdmin ? barbers.filter((barber) => isInQueueBranch(barber.branchId, barber.branch)) : barbers;
   const queueServices = isAdmin ? services.filter((service) => isInQueueBranch(service.branchId, service.branch)) : services;
+  const selectedServicesTotal = selectedServiceItems.reduce((sum, service) => sum + service.price, 0);
+  const isValidContactNumber = /^09\d{9}$/.test(contactNumber.trim());
+
+  const toggleSelectedService = (serviceId: string) => {
+    setSelectedServices((current) =>
+      current.includes(serviceId) ? current.filter((id) => id !== serviceId) : [...current, serviceId]
+    );
+  };
 
   const handleAddToQueue = async () => {
-    if (!selectedBarber || !selectedService || !clientName.trim() || isSubmittingQueue) {
+    if (!selectedBarber || selectedServices.length === 0 || !clientName.trim() || !isValidContactNumber || isSubmittingQueue) {
       return;
     }
 
     const barber = barbers.find((item) => item.id === selectedBarber);
-    const service = services.find((item) => item.id === selectedService);
 
-    if (!barber || !service || !isInQueueBranch(barber.branchId, barber.branch) || !isInQueueBranch(service.branchId, service.branch)) {
+    if (!barber || !isInQueueBranch(barber.branchId, barber.branch) || !selectedServicesAllowed) {
       return;
     }
 
@@ -249,14 +262,19 @@ export default function DashboardPage() {
         : selectedBranch === "all"
           ? null
           : resolveBranchId(selectedBranch);
-      const created = await createTransaction({
-        barberId: barber.id,
-        serviceId: service.id,
-        clientName: clientName.trim(),
-        status: "queued",
-        branchId,
-      });
-      setTransactions((currentTransactions) => [created, ...currentTransactions]);
+      const created = await Promise.all(
+        selectedServiceItems.map((service) =>
+          createTransaction({
+            barberId: barber.id,
+            serviceId: service.id,
+            clientName: clientName.trim(),
+            contactNumber: contactNumber.trim() || null,
+            status: "queued",
+            branchId,
+          })
+        )
+      );
+      setTransactions((currentTransactions) => [...created, ...currentTransactions]);
       setPosModalOpen(false);
       resetPosForm();
     } catch {
@@ -279,9 +297,9 @@ export default function DashboardPage() {
           transaction.id === id ? { ...transaction, status: "completed" } : transaction
         )
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       console.error(err);
-      alert(err.message || "Failed to complete transaction");
+      alert(err instanceof Error ? err.message : "Failed to complete transaction");
     }
   };
 
@@ -293,11 +311,12 @@ export default function DashboardPage() {
   };
 
   const handleExportCSV = () => {
-    const headers = ["Date", "Time", "Client Name", "Barber", "Service", "Branch", "Cost", "Status"];
+    const headers = ["Date", "Time", "Client Name", "Contact Number", "Barber", "Service", "Branch", "Cost", "Status"];
     const rows = filteredTransactions.map((transaction) => [
       transaction.date,
       transaction.time,
       transaction.clientName,
+      transaction.contactNumber ?? "",
       transaction.barber,
       transaction.service,
       transaction.branch ?? "Main Branch",
@@ -358,6 +377,10 @@ export default function DashboardPage() {
           lockedBranchId={lockedBranchId}
           onCompleteTransaction={handleCompleteTransaction}
           onDeleteTransaction={(id) => {
+            if (isCashier) {
+              setCashierDeleteDeniedModalOpen(true);
+              return;
+            }
             setPendingDeleteId(id);
             setDeleteQueueModalOpen(true);
           }}
@@ -422,14 +445,19 @@ export default function DashboardPage() {
                   onClick={() => setPosStep((current) => current + 1)}
                   disabled={
                     (posStep === 1 && (!selectedBarber || !selectedBarberAllowed)) ||
-                    (posStep === 2 && (!selectedService || !selectedServiceAllowed))
+                    (posStep === 2 && (selectedServices.length === 0 || !selectedServicesAllowed)) ||
+                    (posStep === 3 && (!clientName.trim() || !isValidContactNumber))
                   }
                 >
                   Next
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               ) : (
-                <Button variant="primary" onClick={handleAddToQueue} disabled={isSubmittingQueue || !clientName.trim() || !selectedBarberAllowed || !selectedServiceAllowed}>
+                <Button
+                  variant="primary"
+                  onClick={() => setConfirmAddQueueModalOpen(true)}
+                  disabled={isSubmittingQueue || !clientName.trim() || !isValidContactNumber || selectedServices.length === 0 || !selectedBarberAllowed || !selectedServicesAllowed}
+                >
                   <CheckCircle className="h-4 w-4" />
                   {isSubmittingQueue ? "Adding..." : "Add to Queue"}
                 </Button>
@@ -471,17 +499,19 @@ export default function DashboardPage() {
 
         {posStep === 2 && (
           <div className="space-y-3">
-            <h3 className="text-center text-base font-semibold text-[var(--text)]">Step 2: Choose a service</h3>
+            <h3 className="text-center text-base font-semibold text-[var(--text)]">Step 2: Choose services</h3>
+            <div className="max-h-80 space-y-3 overflow-y-auto pr-2">
             {queueServices.map((service) => {
               const branchName = getItemBranchName(service.branchId, service.branch);
+              const isSelected = selectedServices.includes(service.id);
 
               return (
                 <button
                   key={service.id}
                   type="button"
-                  onClick={() => setSelectedService(service.id)}
+                  onClick={() => toggleSelectedService(service.id)}
                   className={`flex w-full items-center justify-between rounded-2xl border-2 p-4 transition ${
-                    selectedService === service.id
+                    isSelected
                       ? "border-[var(--brand)] bg-[var(--primary-light)]"
                       : "border-[var(--border)] bg-white hover:border-[var(--brand)]"
                   }`}
@@ -495,6 +525,7 @@ export default function DashboardPage() {
                 </button>
               );
             })}
+            </div>
           </div>
         )}
 
@@ -506,7 +537,7 @@ export default function DashboardPage() {
                 Barber: <span className="font-semibold text-[var(--text)]">{barbers.find((item) => item.id === selectedBarber)?.name}</span>
               </p>
               <p className="text-sm text-[var(--muted)]">
-                Service: <span className="font-semibold text-[var(--text)]">{services.find((item) => item.id === selectedService)?.name}</span>
+                Services: <span className="font-semibold text-[var(--text)]">{selectedServiceItems.map((item) => item.name).join(", ")}</span>
               </p>
             </div>
             <Input
@@ -518,6 +549,18 @@ export default function DashboardPage() {
               icon={<User className="h-4 w-4" />}
               autoFocus
             />
+            <Input
+              type="tel"
+              label="Contact Number"
+              placeholder="Enter contact number"
+              value={contactNumber}
+              maxLength={11}
+              onChange={(event) => setContactNumber(event.target.value.replace(/\D/g, "").slice(0, 11))}
+              icon={<User className="h-4 w-4" />}
+            />
+            {contactNumber && !isValidContactNumber && (
+              <p className="text-xs font-medium text-red-600">Contact number must be 11 digits and start with 09.</p>
+            )}
           </div>
         )}
 
@@ -530,22 +573,62 @@ export default function DashboardPage() {
                 <span className="font-semibold text-[var(--text)]">{barbers.find((item) => item.id === selectedBarber)?.name}</span>
               </div>
               <div className="flex justify-between text-sm">
-                <span className="text-[var(--muted)]">Service</span>
-                <span className="font-semibold text-[var(--text)]">{services.find((item) => item.id === selectedService)?.name}</span>
+                <span className="text-[var(--muted)]">Services</span>
+                <span className="text-right font-semibold text-[var(--text)]">{selectedServiceItems.map((item) => item.name).join(", ")}</span>
               </div>
               <div className="flex justify-between text-sm">
                 <span className="text-[var(--muted)]">Client</span>
                 <span className="font-semibold text-[var(--text)]">{clientName}</span>
               </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-[var(--muted)]">Contact</span>
+                <span className="font-semibold text-[var(--text)]">{contactNumber || "No contact"}</span>
+              </div>
               <div className="flex justify-between border-t border-[var(--border)] pt-3">
                 <span className="font-medium text-[var(--text)]">Total Cost</span>
                 <span className="font-bold text-[var(--brand)]">
-                  {formatCurrency(services.find((item) => item.id === selectedService)?.price ?? 0)}
+                  {formatCurrency(selectedServicesTotal)}
                 </span>
               </div>
             </Card>
           </div>
         )}
+      </Modal>
+
+      <Modal
+        isOpen={confirmAddQueueModalOpen}
+        onClose={() => {
+          if (isSubmittingQueue) return;
+          setConfirmAddQueueModalOpen(false);
+        }}
+        title="Add to Queue"
+        footer={
+          <div className="flex w-full gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setConfirmAddQueueModalOpen(false)}
+              disabled={isSubmittingQueue}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={async () => {
+                await handleAddToQueue();
+                setConfirmAddQueueModalOpen(false);
+              }}
+              disabled={isSubmittingQueue}
+              className="flex-1"
+            >
+              {isSubmittingQueue ? "Adding..." : "Confirm"}
+            </Button>
+          </div>
+        }
+      >
+        <p className="text-sm text-[var(--muted)]">
+          Add {selectedServices.length} service{selectedServices.length === 1 ? "" : "s"} for {clientName} to the queue?
+        </p>
       </Modal>
 
       <Modal
@@ -575,6 +658,21 @@ export default function DashboardPage() {
       >
         <p className="text-sm text-[var(--muted)]">
           This will permanently remove the queue entry from the transaction history.
+        </p>
+      </Modal>
+
+      <Modal
+        isOpen={cashierDeleteDeniedModalOpen}
+        onClose={() => setCashierDeleteDeniedModalOpen(false)}
+        title="Delete Not Allowed"
+        footer={
+          <Button variant="primary" onClick={() => setCashierDeleteDeniedModalOpen(false)} className="w-full">
+            OK
+          </Button>
+        }
+      >
+        <p className="text-sm text-[var(--muted)]">
+          Only admin and client can delete transaction history.
         </p>
       </Modal>
     </div>
