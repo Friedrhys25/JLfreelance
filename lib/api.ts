@@ -71,6 +71,34 @@ export interface ApiServiceSplit {
   branchId?: string | null;
 }
 
+export interface ApiLoginLog {
+  id: string;
+  userId?: string | null;
+  username: string;
+  role: ApiRole;
+  branchId?: string | null;
+  branch?: string | null;
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  loggedInAt: string;
+}
+
+export interface ApiQueueLog {
+  id: string;
+  transactionId?: string | null;
+  action: "add" | "delete";
+  actorUserId?: string | null;
+  actorUsername: string;
+  actorRole: ApiRole;
+  clientName: string;
+  contactNumber?: string | null;
+  barber?: string | null;
+  service?: string | null;
+  branchId?: string | null;
+  branch?: string | null;
+  loggedAt: string;
+}
+
 let inMemoryToken: string | null = null;
 
 export function getStoredToken() {
@@ -141,6 +169,14 @@ export async function changePassword(input: { currentPassword: string; newPasswo
     method: "PUT",
     body: JSON.stringify(input),
   });
+}
+
+export async function listLoginLogs() {
+  return apiFetch<ApiLoginLog[]>("/login-logs");
+}
+
+export async function listQueueLogs() {
+  return apiFetch<ApiQueueLog[]>("/queue-logs");
 }
 
 export async function listBranches() {
