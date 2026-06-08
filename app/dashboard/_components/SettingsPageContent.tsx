@@ -1,15 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { Building, Eye, EyeOff, KeyRound, Scissors, Users } from "lucide-react";
+import { Building, Clock3, Eye, EyeOff, KeyRound, Scissors, Users } from "lucide-react";
 import { useAuth } from "@/app/contexts/AuthContext";
 import { Button } from "@/app/components/Button";
 import { Input } from "@/app/components/Input";
 import { Modal } from "@/app/components/Modal";
 import { DashboardTopBar } from "@/app/dashboard/_components/DashboardTopBar";
 import { ServiceSettingsContent } from "@/app/dashboard/settings/_components/ServiceSettingsContent";
-import { changePassword, createBarber, listBarbers, deleteBarber } from "@/lib/api";
-import type { ApiBarber, ApiBranch } from "@/lib/api";
+import { changePassword, createBarber, deleteBarber, listBarbers, listLoginLogs, listQueueLogs } from "@/lib/api";
+import type { ApiBarber, ApiBranch, ApiLoginLog, ApiQueueLog } from "@/lib/api";
 
 export function SettingsPageContent() {
   const { addBranch, addUser, branches, deleteBranch, deleteUser, isAdmin, isClient, isCashier, logout, user, users } = useAuth();
@@ -53,6 +53,14 @@ export function SettingsPageContent() {
   const [confirmBranchModalOpen, setConfirmBranchModalOpen] = useState(false);
   const [isSubmittingBranch, setIsSubmittingBranch] = useState(false);
   const [newBranchDraft, setNewBranchDraft] = useState("");
+  const [loginLogsModalOpen, setLoginLogsModalOpen] = useState(false);
+  const [loginLogs, setLoginLogs] = useState<ApiLoginLog[]>([]);
+  const [isLoadingLoginLogs, setIsLoadingLoginLogs] = useState(false);
+  const [loginLogsMessage, setLoginLogsMessage] = useState("");
+  const [queueLogsModalOpen, setQueueLogsModalOpen] = useState(false);
+  const [queueLogs, setQueueLogs] = useState<ApiQueueLog[]>([]);
+  const [isLoadingQueueLogs, setIsLoadingQueueLogs] = useState(false);
+  const [queueLogsMessage, setQueueLogsMessage] = useState("");
 
   const resolveBranchId = (branchName: string) => branches.find((branch) => branch.name === branchName)?.id ?? null;
   const resolveBranchName = (branchId?: string | null) => branches.find((branch) => branch.id === branchId)?.name ?? null;
@@ -73,6 +81,38 @@ export function SettingsPageContent() {
       setBarbersList(data);
     } finally {
       setIsLoadingBarbers(false);
+    }
+  };
+
+  const handleOpenLoginLogs = async () => {
+    if (!isAdmin) return;
+    setLoginLogsModalOpen(true);
+    setIsLoadingLoginLogs(true);
+    setLoginLogsMessage("");
+    try {
+      const data = await listLoginLogs();
+      setLoginLogs(data);
+    } catch (error) {
+      setLoginLogs([]);
+      setLoginLogsMessage(error instanceof Error ? error.message : "Failed to load login logs.");
+    } finally {
+      setIsLoadingLoginLogs(false);
+    }
+  };
+
+  const handleOpenQueueLogs = async () => {
+    if (!isAdmin) return;
+    setQueueLogsModalOpen(true);
+    setIsLoadingQueueLogs(true);
+    setQueueLogsMessage("");
+    try {
+      const data = await listQueueLogs();
+      setQueueLogs(data);
+    } catch (error) {
+      setQueueLogs([]);
+      setQueueLogsMessage(error instanceof Error ? error.message : "Failed to load queue logs.");
+    } finally {
+      setIsLoadingQueueLogs(false);
     }
   };
 
@@ -206,6 +246,18 @@ export function SettingsPageContent() {
               <Button variant="outline" onClick={() => setAllBranchesModalOpen(true)}>
                 <Building className="h-4 w-4" />
                 All Branches
+              </Button>
+            )}
+            {isAdmin && (
+              <Button variant="outline" onClick={handleOpenLoginLogs}>
+                <Clock3 className="h-4 w-4" />
+                Login Logs
+              </Button>
+            )}
+            {isAdmin && (
+              <Button variant="outline" onClick={handleOpenQueueLogs}>
+                <Clock3 className="h-4 w-4" />
+                Queue Logs
               </Button>
             )}
             {isAdmin && (
@@ -666,6 +718,115 @@ export function SettingsPageContent() {
                     >
                       Delete
                     </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {isAdmin && (
+        <Modal
+          isOpen={loginLogsModalOpen}
+          onClose={() => setLoginLogsModalOpen(false)}
+          title="Login Logs"
+          footer={
+            <Button variant="outline" onClick={() => setLoginLogsModalOpen(false)} className="w-full">
+              Close
+            </Button>
+          }
+        >
+          <div className="space-y-3">
+            {isLoadingLoginLogs ? (
+              <div className="max-h-[28rem] overflow-y-auto pr-2">
+                <p className="text-sm text-[var(--muted)]">Loading login logs...</p>
+              </div>
+            ) : loginLogsMessage ? (
+              <div className="max-h-[28rem] overflow-y-auto pr-2">
+                <p className="rounded-lg bg-[var(--surface-alt)] px-3 py-2 text-sm text-red-600">
+                  {loginLogsMessage}
+                </p>
+              </div>
+            ) : loginLogs.length === 0 ? (
+              <div className="max-h-[28rem] overflow-y-auto pr-2">
+                <p className="text-sm text-[var(--muted)]">No login logs found.</p>
+              </div>
+            ) : (
+              <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-2">
+                {loginLogs.map((log) => (
+                  <div key={log.id} className="rounded-xl bg-[var(--surface-alt)] p-3">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-[var(--text)]">{log.username}</p>
+                        <p className="text-xs text-[var(--muted)]">
+                          {log.role} - {log.branch ?? "No branch"}
+                        </p>
+                      </div>
+                      <p className="text-xs text-[var(--muted)]">
+                        {new Date(log.loggedInAt).toLocaleString()}
+                      </p>
+                    </div>
+                    {(log.ipAddress || log.userAgent) && (
+                      <p className="mt-2 break-words text-xs text-[var(--muted)]">
+                        {[log.ipAddress, log.userAgent].filter(Boolean).join(" - ")}
+                      </p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Modal>
+      )}
+
+      {isAdmin && (
+        <Modal
+          isOpen={queueLogsModalOpen}
+          onClose={() => setQueueLogsModalOpen(false)}
+          title="Queue Logs"
+          footer={
+            <Button variant="outline" onClick={() => setQueueLogsModalOpen(false)} className="w-full">
+              Close
+            </Button>
+          }
+        >
+          <div className="space-y-3">
+            {isLoadingQueueLogs ? (
+              <div className="max-h-[28rem] overflow-y-auto pr-2">
+                <p className="text-sm text-[var(--muted)]">Loading queue logs...</p>
+              </div>
+            ) : queueLogsMessage ? (
+              <div className="max-h-[28rem] overflow-y-auto pr-2">
+                <p className="rounded-lg bg-[var(--surface-alt)] px-3 py-2 text-sm text-red-600">
+                  {queueLogsMessage}
+                </p>
+              </div>
+            ) : queueLogs.length === 0 ? (
+              <div className="max-h-[28rem] overflow-y-auto pr-2">
+                <p className="text-sm text-[var(--muted)]">No queue logs found.</p>
+              </div>
+            ) : (
+              <div className="max-h-[28rem] space-y-2 overflow-y-auto pr-2">
+                {queueLogs.map((log) => (
+                  <div key={log.id} className="rounded-xl bg-[var(--surface-alt)] p-3">
+                    <div className="flex flex-col gap-1 sm:flex-row sm:items-start sm:justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-[var(--text)]">
+                          {log.action === "add" ? "Added queue" : "Deleted queue"}
+                        </p>
+                        <p className="text-xs text-[var(--muted)]">
+                          By {log.actorUsername} ({log.actorRole}) - {log.branch ?? "No branch"}
+                        </p>
+                      </div>
+                      <p className="text-xs text-[var(--muted)]">
+                        {new Date(log.loggedAt).toLocaleString()}
+                      </p>
+                    </div>
+                    <p className="mt-2 text-sm text-[var(--text)]">{log.clientName}</p>
+                    <p className="break-words text-xs text-[var(--muted)]">
+                      {[log.contactNumber, log.barber, log.service].filter(Boolean).join(" - ")}
+                    </p>
                   </div>
                 ))}
               </div>

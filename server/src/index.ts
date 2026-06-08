@@ -16,6 +16,40 @@ const firstOrNull = <T,>(value: T | T[] | null | undefined): T | null => {
 
 const isBranchScopedRole = (role?: string | null) => role === "client" || role === "cashier";
 
+type QueueLogInput = {
+  transactionId: string;
+  action: "add" | "delete";
+  actorUserId: string;
+  actorUsername: string;
+  actorRole: string;
+  clientName: string;
+  contactNumber?: string | null;
+  barberName?: string | null;
+  serviceName?: string | null;
+  branchId?: string | null;
+  branchName?: string | null;
+};
+
+const createQueueLog = async (input: QueueLogInput) => {
+  const { error } = await supabase.from("queue_logs").insert({
+    transaction_id: input.transactionId,
+    action: input.action,
+    actor_user_id: input.actorUserId,
+    actor_username: input.actorUsername,
+    actor_role: input.actorRole,
+    client_name: input.clientName,
+    contact_number: input.contactNumber ?? null,
+    barber_name: input.barberName ?? null,
+    service_name: input.serviceName ?? null,
+    branch_id: input.branchId ?? null,
+    branch_name: input.branchName ?? null,
+  });
+
+  if (error) {
+    console.error("Queue log error:", error.message);
+  }
+};
+
 app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(express.json());
 
@@ -56,6 +90,20 @@ app.post("/auth/login", async (req, res) => {
     branchId: branch?.id ?? null,
     branchName: branch?.name ?? null,
   });
+
+  const { error: loginLogError } = await supabase.from("login_logs").insert({
+    user_id: data.id,
+    username: data.username,
+    role: data.role,
+    branch_id: branch?.id ?? null,
+    branch_name: branch?.name ?? null,
+    ip_address: req.ip ?? null,
+    user_agent: req.headers["user-agent"] ?? null,
+  });
+
+  if (loginLogError) {
+    console.error("Login log error:", loginLogError.message);
+  }
 
   res.json({
     token,
@@ -131,6 +179,66 @@ app.put("/auth/password", requireAuth, async (req, res) => {
   }
 
   res.json({ ok: true });
+});
+
+app.get("/login-logs", requireAuth, requireAdmin, async (_req, res) => {
+  const { data, error } = await supabase
+    .from("login_logs")
+    .select("id, user_id, username, role, branch_id, branch_name, ip_address, user_agent, logged_in_at")
+    .order("logged_in_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json(
+    (data ?? []).map((row) => ({
+      id: row.id,
+      userId: row.user_id ?? null,
+      username: row.username,
+      role: row.role,
+      branchId: row.branch_id ?? null,
+      branch: row.branch_name ?? null,
+      ipAddress: row.ip_address ?? null,
+      userAgent: row.user_agent ?? null,
+      loggedInAt: row.logged_in_at,
+    }))
+  );
+});
+
+app.get("/queue-logs", requireAuth, requireAdmin, async (_req, res) => {
+  const { data, error } = await supabase
+    .from("queue_logs")
+    .select(
+      "id, transaction_id, action, actor_user_id, actor_username, actor_role, client_name, contact_number, barber_name, service_name, branch_id, branch_name, logged_at"
+    )
+    .order("logged_at", { ascending: false })
+    .limit(100);
+
+  if (error) {
+    res.status(500).json({ error: error.message });
+    return;
+  }
+
+  res.json(
+    (data ?? []).map((row) => ({
+      id: row.id,
+      transactionId: row.transaction_id ?? null,
+      action: row.action,
+      actorUserId: row.actor_user_id ?? null,
+      actorUsername: row.actor_username,
+      actorRole: row.actor_role,
+      clientName: row.client_name,
+      contactNumber: row.contact_number ?? null,
+      barber: row.barber_name ?? null,
+      service: row.service_name ?? null,
+      branchId: row.branch_id ?? null,
+      branch: row.branch_name ?? null,
+      loggedAt: row.logged_at,
+    }))
+  );
 });
 
 app.get("/branches", requireAuth, async (_req, res) => {
@@ -845,6 +953,23 @@ app.post("/transactions", requireAuth, async (req, res) => {
   const createdBarber = firstOrNull(data.barber);
   const createdService = firstOrNull(data.service);
   const createdBranch = firstOrNull(data.branch);
+
+  if (req.user) {
+    await createQueueLog({
+      transactionId: data.id,
+      action: "add",
+      actorUserId: req.user.id,
+      actorUsername: req.user.username,
+      actorRole: req.user.role,
+      clientName: data.client_name,
+      contactNumber: data.contact_number ?? null,
+      barberName: createdBarber?.name ?? null,
+      serviceName: createdService?.name ?? null,
+      branchId: createdBranch?.id ?? null,
+      branchName: createdBranch?.name ?? null,
+    });
+  }
+
   res.status(201).json({
     id: data.id,
     date: data.date,
@@ -867,11 +992,42 @@ app.delete("/transactions/:id", requireAuth, async (req, res) => {
   }
 
   const { id } = req.params;
+  const { data: transactionToDelete, error: findError } = await supabase
+    .from("transactions")
+    .select("id, client_name, contact_number, barber:barbers(name), service:services(name), branch:branches(id,name)")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (findError) {
+    res.status(500).json({ error: findError.message });
+    return;
+  }
+
   const { error } = await supabase.from("transactions").delete().eq("id", id);
 
   if (error) {
     res.status(500).json({ error: error.message });
     return;
+  }
+
+  if (req.user && transactionToDelete) {
+    const deletedBarber = firstOrNull(transactionToDelete.barber);
+    const deletedService = firstOrNull(transactionToDelete.service);
+    const deletedBranch = firstOrNull(transactionToDelete.branch);
+
+    await createQueueLog({
+      transactionId: transactionToDelete.id,
+      action: "delete",
+      actorUserId: req.user.id,
+      actorUsername: req.user.username,
+      actorRole: req.user.role,
+      clientName: transactionToDelete.client_name,
+      contactNumber: transactionToDelete.contact_number ?? null,
+      barberName: deletedBarber?.name ?? null,
+      serviceName: deletedService?.name ?? null,
+      branchId: deletedBranch?.id ?? null,
+      branchName: deletedBranch?.name ?? null,
+    });
   }
 
   res.status(204).end();
